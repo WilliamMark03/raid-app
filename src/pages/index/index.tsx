@@ -13,6 +13,7 @@ import { Trash2, Users, Calendar, Clock, Download } from 'lucide-react-taro'
 // 报名类型选项
 const REGISTRATION_TYPE_OPTIONS = [
   { value: '打本报名', label: '打本报名' },
+  { value: '百业战报名', label: '百业战报名' },
   { value: '其他活动报名', label: '其他活动报名' }
 ]
 
@@ -21,12 +22,25 @@ const SCHOOL_OPTIONS = [
   '虹虹', '影影', '风风', '尘尘', '鸢鸢', '威威', '钧钧', '玉玉', '霖霖', '翊翊', '其它'
 ]
 
-// 时段选项
-const TIME_SLOT_OPTIONS = [
+// 打本时段选项
+const RAID_TIME_SLOT_OPTIONS = [
   { value: '7点半', label: '7点半' },
   { value: '8点半', label: '8点半' },
   { value: '9点半', label: '9点半' },
   { value: '额外附加时间', label: '额外附加时间' }
+]
+
+// 百业战时间选项
+const BAIYE_TIME_OPTIONS = [
+  { value: '周六', label: '周六' },
+  { value: '周日', label: '周日' },
+  { value: '周六及周日', label: '周六及周日' }
+]
+
+// 小队选项
+const TEAM_OPTIONS = [
+  { value: '进攻组', label: '进攻组' },
+  { value: '防守组', label: '防守组' }
 ]
 
 // 报名记录类型
@@ -38,6 +52,7 @@ interface RaidRegistration {
   is_commander: boolean
   raid_date: string
   raid_time_slot: string
+  team: string | null
   group_number: number
   created_at: string
 }
@@ -61,14 +76,25 @@ export default function IndexPage() {
   const [playerId, setPlayerId] = useState('')
   const [schoolIndex, setSchoolIndex] = useState(0)
   const [timeSlotIndex, setTimeSlotIndex] = useState(0)
+  const [baiyeTimeIndex, setBaiyeTimeIndex] = useState(0)
+  const [teamIndex, setTeamIndex] = useState(0)
   const [selectedDate, setSelectedDate] = useState('')
   const [isCommander, setIsCommander] = useState(false)
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
+  const [baiyeData, setBaiyeData] = useState<GroupedRegistrations>({})
   const [otherActivityData, setOtherActivityData] = useState<GroupedRegistrations>({})
   const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  
+  // 当前选择的报名类型
+  const currentRegistrationType = REGISTRATION_TYPE_OPTIONS[registrationTypeIndex]?.value || '打本报名'
+  
+  // 根据报名类型判断是否显示日期选择（百业战不显示日期选择，显示时间选项）
+  const showDatePicker = currentRegistrationType !== '百业战报名'
+  const showBaiyeOptions = currentRegistrationType === '百业战报名'
+  const showTimeSlotPicker = currentRegistrationType === '打本报名'
 
   // 获取今天的日期字符串
   const getTodayDate = () => {
@@ -111,9 +137,10 @@ export default function IndexPage() {
   // 计算分组（按报名类型、日期+时段分组）
   const calculateGroups = (data: RaidRegistration[]) => {
     const raidGrouped: GroupedRegistrations = {}
+    const baiyeGrouped: GroupedRegistrations = {}
     const otherGrouped: GroupedRegistrations = {}
     
-    // 分离打本报名和其他活动报名
+    // 分离打本报名、百业战报名和其他活动报名
     data.forEach(reg => {
       const key = `${reg.raid_date}_${reg.raid_time_slot}`
       
@@ -122,6 +149,13 @@ export default function IndexPage() {
           raidGrouped[key] = []
         }
         raidGrouped[key].push(reg)
+      } else if (reg.registration_type === '百业战报名') {
+        // 百业战按日期+小队分组
+        const baiyeKey = `${reg.raid_date}_${reg.team || '未分配'}`
+        if (!baiyeGrouped[baiyeKey]) {
+          baiyeGrouped[baiyeKey] = []
+        }
+        baiyeGrouped[baiyeKey].push(reg)
       } else {
         if (!otherGrouped[key]) {
           otherGrouped[key] = []
@@ -131,6 +165,7 @@ export default function IndexPage() {
     })
 
     setGroupedData(raidGrouped)
+    setBaiyeData(baiyeGrouped)
     setOtherActivityData(otherGrouped)
   }
 
@@ -140,24 +175,39 @@ export default function IndexPage() {
       Taro.showToast({ title: '请输入玩家ID', icon: 'none' })
       return
     }
-    if (!selectedDate) {
+    
+    // 打本报名和其他活动报名需要选择日期
+    if (showDatePicker && !selectedDate) {
       Taro.showToast({ title: '请选择日期', icon: 'none' })
       return
     }
 
     setLoading(true)
     try {
+      // 根据报名类型构建不同的请求数据
+      const requestData: Record<string, any> = {
+        registration_type: currentRegistrationType,
+        player_id: playerId.trim(),
+        school: SCHOOL_OPTIONS[schoolIndex],
+        is_commander: isCommander
+      }
+      
+      if (currentRegistrationType === '打本报名') {
+        requestData.raid_date = selectedDate
+        requestData.raid_time_slot = RAID_TIME_SLOT_OPTIONS[timeSlotIndex].value
+      } else if (currentRegistrationType === '百业战报名') {
+        requestData.raid_date = BAIYE_TIME_OPTIONS[baiyeTimeIndex].value
+        requestData.raid_time_slot = BAIYE_TIME_OPTIONS[baiyeTimeIndex].value
+        requestData.team = TEAM_OPTIONS[teamIndex].value
+      } else {
+        requestData.raid_date = selectedDate
+        requestData.raid_time_slot = '全天'
+      }
+      
       const res = await Network.request({
         url: '/api/raid-registrations',
         method: 'POST',
-        data: {
-          registration_type: REGISTRATION_TYPE_OPTIONS[registrationTypeIndex].value,
-          player_id: playerId.trim(),
-          school: SCHOOL_OPTIONS[schoolIndex],
-          is_commander: isCommander,
-          raid_date: selectedDate,
-          raid_time_slot: TIME_SLOT_OPTIONS[timeSlotIndex].value
-        }
+        data: requestData
       })
       console.log('提交报名响应:', res.data)
 
@@ -263,6 +313,7 @@ export default function IndexPage() {
 
   // 统计人数
   const raidCount = registrations.filter(r => r.registration_type === '打本报名').length
+  const baiyeCount = registrations.filter(r => r.registration_type === '百业战报名').length
   const otherCount = registrations.filter(r => r.registration_type === '其他活动报名').length
   const totalCount = registrations.length
 
@@ -271,9 +322,12 @@ export default function IndexPage() {
       {/* 标题区 */}
       <View className="mb-4">
         <Text className="block text-xl font-bold text-gray-900">活动报名</Text>
-        <View className="flex flex-row gap-4 mt-1">
+        <View className="flex flex-row gap-4 mt-1 flex-wrap">
           <Text className="block text-sm text-gray-500">
             打本报名 <Text className="text-indigo-500 font-semibold">{raidCount}</Text> 人
+          </Text>
+          <Text className="block text-sm text-gray-500">
+            百业战报名 <Text className="text-orange-500 font-semibold">{baiyeCount}</Text> 人
           </Text>
           <Text className="block text-sm text-gray-500">
             其他活动 <Text className="text-emerald-500 font-semibold">{otherCount}</Text> 人
@@ -324,29 +378,66 @@ export default function IndexPage() {
             </Picker>
           </View>
 
-          {/* 活动日期 */}
-          <View>
-            <Label className="text-sm text-gray-700 mb-1 block">活动日期</Label>
-            <Picker mode="date" value={selectedDate} start={getTodayDate()} onChange={handleDateChange}>
-              <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
-                <Text className={selectedDate ? 'text-gray-900' : 'text-gray-400'}>
-                  {selectedDate || '请选择日期'}
-                </Text>
-                <Calendar size={18} color="#64748b" />
+          {/* 活动日期/时间选择 */}
+          {showDatePicker ? (
+            <View>
+              <Label className="text-sm text-gray-700 mb-1 block">活动日期</Label>
+              <Picker mode="date" value={selectedDate} start={getTodayDate()} onChange={handleDateChange}>
+                <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                  <Text className={selectedDate ? 'text-gray-900' : 'text-gray-400'}>
+                    {selectedDate || '请选择日期'}
+                  </Text>
+                  <Calendar size={18} color="#64748b" />
+                </View>
+              </Picker>
+            </View>
+          ) : showBaiyeOptions ? (
+            <>
+              <View>
+                <Label className="text-sm text-gray-700 mb-1 block">活动时间</Label>
+                <Picker mode="selector" range={BAIYE_TIME_OPTIONS.map(t => t.label)} value={baiyeTimeIndex} onChange={(e) => setBaiyeTimeIndex(Number(e.detail.value))}>
+                  <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                    <Text className="text-gray-900">{BAIYE_TIME_OPTIONS[baiyeTimeIndex].label}</Text>
+                    <Clock size={18} color="#64748b" />
+                  </View>
+                </Picker>
               </View>
-            </Picker>
-          </View>
+              <View>
+                <Label className="text-sm text-gray-700 mb-1 block">选择小队</Label>
+                <Picker mode="selector" range={TEAM_OPTIONS.map(t => t.label)} value={teamIndex} onChange={(e) => setTeamIndex(Number(e.detail.value))}>
+                  <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                    <Text className="text-gray-900">{TEAM_OPTIONS[teamIndex].label}</Text>
+                    <Text className="text-gray-400 text-sm">▼</Text>
+                  </View>
+                </Picker>
+              </View>
+            </>
+          ) : (
+            <View>
+              <Label className="text-sm text-gray-700 mb-1 block">活动日期</Label>
+              <Picker mode="date" value={selectedDate} start={getTodayDate()} onChange={handleDateChange}>
+                <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                  <Text className={selectedDate ? 'text-gray-900' : 'text-gray-400'}>
+                    {selectedDate || '请选择日期'}
+                  </Text>
+                  <Calendar size={18} color="#64748b" />
+                </View>
+              </Picker>
+            </View>
+          )}
 
-          {/* 活动时段 */}
-          <View>
-            <Label className="text-sm text-gray-700 mb-1 block">活动时段</Label>
-            <Picker mode="selector" range={TIME_SLOT_OPTIONS.map(t => t.label)} value={timeSlotIndex} onChange={handleTimeSlotChange}>
-              <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
-                <Text className="text-gray-900">{TIME_SLOT_OPTIONS[timeSlotIndex].label}</Text>
-                <Clock size={18} color="#64748b" />
-              </View>
-            </Picker>
-          </View>
+          {/* 活动时段（仅打本报名显示） */}
+          {showTimeSlotPicker && (
+            <View>
+              <Label className="text-sm text-gray-700 mb-1 block">活动时段</Label>
+              <Picker mode="selector" range={RAID_TIME_SLOT_OPTIONS.map(t => t.label)} value={timeSlotIndex} onChange={handleTimeSlotChange}>
+                <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                  <Text className="text-gray-900">{RAID_TIME_SLOT_OPTIONS[timeSlotIndex].label}</Text>
+                  <Clock size={18} color="#64748b" />
+                </View>
+              </Picker>
+            </View>
+          )}
 
           {/* 是否为指挥 */}
           <View className="flex flex-row items-center justify-between py-2">
@@ -361,7 +452,11 @@ export default function IndexPage() {
 
           {/* 提交按钮 */}
           <Button
-            className={`w-full text-white ${registrationTypeIndex === 0 ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+            className={`w-full text-white ${
+              currentRegistrationType === '打本报名' ? 'bg-indigo-500 hover:bg-indigo-600' :
+              currentRegistrationType === '百业战报名' ? 'bg-orange-500 hover:bg-orange-600' :
+              'bg-emerald-500 hover:bg-emerald-600'
+            }`}
             onClick={handleSubmit}
             disabled={loading}
           >
@@ -506,6 +601,56 @@ export default function IndexPage() {
                         </View>
                       ))}
                     </View>
+                  </View>
+                </View>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 百业战报名分组结果区 */}
+      {Object.keys(baiyeData).length > 0 && (
+        <Card className="mb-4 border-orange-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center">
+              <Users size={18} color="#f97316" className="mr-2" />
+              百业战报名
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {Object.entries(baiyeData).map(([key, members]) => {
+              const [date, team] = key.split('_')
+              
+              return (
+                <View key={key} className="mb-4 last:mb-0">
+                  <View className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-orange-50 text-orange-600 border-orange-200">
+                      {date}
+                    </Badge>
+                    <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
+                      {team}
+                    </Badge>
+                    <Text className="text-xs text-gray-500">共 {members.length} 人</Text>
+                  </View>
+                  
+                  <View className="bg-gray-50 rounded-lg p-3">
+                    {members.map((member, idx) => (
+                      <View key={member.id} className={`flex flex-row items-center justify-between py-2 ${idx < members.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                        <View className="flex flex-row items-center gap-2">
+                          <Text className="text-sm text-gray-900">{member.player_id}</Text>
+                          <Badge variant="outline" className={`text-xs ${member.school === '霖霖' ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-600'}`}>
+                            {member.school}
+                          </Badge>
+                          {member.is_commander && (
+                            <Badge className="bg-amber-100 text-amber-700 text-xs">指挥</Badge>
+                          )}
+                        </View>
+                        <View onClick={() => handleDelete(member.id)}>
+                          <Trash2 size={16} color="#ef4444" />
+                        </View>
+                      </View>
+                    ))}
                   </View>
                 </View>
               )

@@ -8,6 +8,7 @@ export interface CreateRaidRegistrationDto {
   is_commander: boolean
   raid_date: string
   raid_time_slot: string
+  team?: string // 小队：进攻组、防守组（百业战报名专用）
 }
 
 export interface RaidRegistration {
@@ -18,6 +19,7 @@ export interface RaidRegistration {
   is_commander: boolean
   raid_date: string
   raid_time_slot: string
+  team: string | null
   group_number: number
   created_at: string
   updated_at: string
@@ -71,6 +73,7 @@ export class RaidRegistrationService {
         is_commander: dto.is_commander || false,
         raid_date: dto.raid_date,
         raid_time_slot: dto.raid_time_slot,
+        team: dto.team || null,
         group_number: 0
       })
       .select()
@@ -83,6 +86,11 @@ export class RaidRegistrationService {
     // 打本报名才更新分组号
     if (dto.registration_type === '打本报名') {
       await this.updateGroupNumbers(dto.raid_date, dto.raid_time_slot)
+    }
+    
+    // 百业战报名按日期和小队更新分组
+    if (dto.registration_type === '百业战报名') {
+      await this.updateBaiyeGroupNumbers(dto.raid_date, dto.team || null)
     }
 
     // 重新获取更新后的记录
@@ -107,6 +115,9 @@ export class RaidRegistrationService {
     
     // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
+    
+    // 更新百业战报名的分组
+    await this.updateAllBaiyeGroupNumbers()
 
     // 重新获取
     const { data: updatedData, error: fetchError } = await client
@@ -155,6 +166,11 @@ export class RaidRegistrationService {
     // 打本报名才更新分组
     if (record && record.registration_type === '打本报名') {
       await this.updateGroupNumbers(record.raid_date, record.raid_time_slot)
+    }
+    
+    // 百业战报名更新分组
+    if (record && record.registration_type === '百业战报名') {
+      await this.updateBaiyeGroupNumbers(record.raid_date, null)
     }
   }
 
@@ -310,6 +326,78 @@ export class RaidRegistrationService {
   }
 
   /**
+   * 更新所有百业战报名的分组号（按日期和小队分组，无人数限制）
+   */
+  private async updateAllBaiyeGroupNumbers(): Promise<void> {
+    const client = this.getClient()
+    
+    // 获取所有百业战报名的日期
+    const { data: records, error } = await client
+      .from('raid_registrations')
+      .select('raid_date, team')
+      .eq('registration_type', '百业战报名')
+
+    if (error || !records || records.length === 0) {
+      return
+    }
+
+    // 获取所有唯一的日期+小队组合
+    const combinations = new Set<string>()
+    records.forEach(r => {
+      if (r.raid_date && r.team) {
+        combinations.add(`${r.raid_date}_${r.team}`)
+      }
+    })
+
+    // 更新每个组合的分组
+    for (const combo of combinations) {
+      const [date, team] = combo.split('_')
+      await this.updateBaiyeGroupNumbers(date, team)
+    }
+  }
+
+  /**
+   * 更新指定日期和小队的百业战报名分组号（按报名时间排序，无人数限制）
+   */
+  private async updateBaiyeGroupNumbers(raidDate: string, specificTeam: string | null): Promise<void> {
+    const client = this.getClient()
+    
+    // 获取该日期的百业战报名记录
+    let query = client
+      .from('raid_registrations')
+      .select('id, team')
+      .eq('raid_date', raidDate)
+      .eq('registration_type', '百业战报名')
+      .order('created_at', { ascending: true })
+
+    const { data: records, error } = await query
+
+    if (error || !records || records.length === 0) {
+      return
+    }
+
+    // 按小队分组，每个小队内部按报名时间排序分配组号（组号固定为1，因为无人数限制）
+    const teamGroups: { [key: string]: number[] } = {}
+    records.forEach(r => {
+      const team = r.team || '未分配'
+      if (!teamGroups[team]) {
+        teamGroups[team] = []
+      }
+      teamGroups[team].push(r.id)
+    })
+
+    // 更新每个小队的分组号（都设为1，表示该小队的成员）
+    for (const [team, ids] of Object.entries(teamGroups)) {
+      for (const id of ids) {
+        await client
+          .from('raid_registrations')
+          .update({ group_number: 1 })
+          .eq('id', id)
+      }
+    }
+  }
+
+  /**
    * 导出Excel统计数据
    */
   async exportExcel(): Promise<Buffer> {
@@ -352,6 +440,7 @@ export class RaidRegistrationService {
         '是否指挥': record.is_commander ? '是' : '否',
         '活动日期': record.raid_date,
         '时间': record.raid_time_slot,
+        '小队': record.team || '-',
         '组号': record.registration_type === '打本报名' ? record.group_number : '-',
         '分组提醒': groupWarning?.warning || '',
         '报名时间': new Date(record.created_at).toLocaleString('zh-CN')
@@ -370,8 +459,9 @@ export class RaidRegistrationService {
       { wch: 15 },  // 玩家ID
       { wch: 10 },  // 流派
       { wch: 10 },  // 是否指挥
-      { wch: 12 },  // 活动日期
+      { wch: 14 },  // 活动日期
       { wch: 12 },  // 时间
+      { wch: 10 },  // 小队
       { wch: 6 },   // 组号
       { wch: 25 },  // 分组提醒
       { wch: 20 }   // 报名时间
