@@ -17,10 +17,10 @@ const SCHOOL_OPTIONS = [
 
 // 时段选项
 const TIME_SLOT_OPTIONS = [
-  { value: '上午', label: '上午 (9:00-12:00)' },
-  { value: '下午', label: '下午 (14:00-18:00)' },
-  { value: '晚上', label: '晚上 (19:00-22:00)' },
-  { value: '深夜', label: '深夜 (22:00-次日2:00)' }
+  { value: '7点半', label: '7点半' },
+  { value: '8点半', label: '8点半' },
+  { value: '9点半', label: '9点半' },
+  { value: '额外附加时间', label: '额外附加时间' }
 ]
 
 // 报名记录类型
