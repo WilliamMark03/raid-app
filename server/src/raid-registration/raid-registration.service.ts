@@ -404,7 +404,7 @@ export class RaidRegistrationService {
    * 导出Excel统计数据
    */
   async exportExcel(): Promise<Buffer> {
-    const XLSX = await import('xlsx')
+    const XLSX = await import('xlsx-js-style')
     const client = this.getClient()
     
     // 更新打本报名的分组并获取警告
@@ -424,9 +424,36 @@ export class RaidRegistrationService {
       throw new Error(`获取数据失败: ${error.message}`)
     }
 
-    // 转换为Excel数据格式
-    const excelData = data.map((record, index) => {
-      // 打本报名才检查分组警告
+    // 流派颜色映射
+    const getSchoolStyle = (school: string) => {
+      const yellowStyle = { fill: { fgColor: { rgb: 'FFFFFF00' } } }  // 黄色
+      const purpleStyle = { fill: { fgColor: { rgb: 'FFD8BFD8' } } }  // 紫色
+      const greenStyle = { fill: { fgColor: { rgb: 'FF90EE90' } } }   // 浅绿色
+      const blueStyle = { fill: { fgColor: { rgb: 'FFADD8E6' } } }    // 浅蓝色
+
+      switch (school) {
+        case '威威':
+          return yellowStyle
+        case '玉玉':
+        case '虹虹':
+        case '翊翊':
+        case '尘尘':
+          return purpleStyle
+        case '霖霖':
+          return greenStyle
+        default:
+          return blueStyle
+      }
+    }
+
+    // 定义列名
+    const headers = ['序号', '报名类型', '玩家ID', '流派', '是否指挥', '活动日期', '时间', '小队', '组号', '分组提醒', '备注', '报名时间']
+    
+    // 创建工作表数据
+    const wsData = [headers]
+    
+    // 添加数据行
+    data.forEach((record, index) => {
       const groupWarning = record.registration_type === '打本报名' 
         ? warnings.find(w => 
             w.raid_date === record.raid_date && 
@@ -435,26 +462,25 @@ export class RaidRegistrationService {
           )
         : undefined
 
-      return {
-        '序号': index + 1,
-        '报名类型': record.registration_type,
-        '玩家ID': record.player_id,
-        '流派': record.school,
-        '是否指挥': record.is_commander ? '是' : '否',
-        '活动日期': record.raid_date,
-        '时间': record.raid_time_slot,
-        '小队': record.team || '-',
-        '组号': record.registration_type === '打本报名' ? record.group_number : '-',
-        '分组提醒': groupWarning?.warning || '',
-        '备注': record.remark || '',
-        '报名时间': new Date(record.created_at).toLocaleString('zh-CN')
-      }
+      wsData.push([
+        index + 1,
+        record.registration_type,
+        record.player_id,
+        record.school,
+        record.is_commander ? '是' : '否',
+        record.raid_date,
+        record.raid_time_slot,
+        record.team || '-',
+        record.registration_type === '打本报名' ? record.group_number : '-',
+        groupWarning?.warning || '',
+        record.remark || '',
+        new Date(record.created_at).toLocaleString('zh-CN')
+      ])
     })
 
-    // 创建工作簿
-    const worksheet = XLSX.utils.json_to_sheet(excelData)
+    // 创建工作簿和工作表
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
+    const worksheet = XLSX.utils.aoa_to_sheet(wsData)
 
     // 设置列宽
     worksheet['!cols'] = [
@@ -471,6 +497,27 @@ export class RaidRegistrationService {
       { wch: 30 },  // 备注
       { wch: 20 }   // 报名时间
     ]
+
+    // 设置表头样式
+    headers.forEach((_, colIndex) => {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex })
+      if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
+      worksheet[cellAddress].s = {
+        fill: { fgColor: { rgb: 'FF4472C4' } },
+        font: { bold: true, color: { rgb: 'FFFFFFFF' } },
+        alignment: { horizontal: 'center', vertical: 'center' }
+      }
+    })
+
+    // 为流派列（第4列，索引为3）设置颜色
+    for (let rowIndex = 1; rowIndex < wsData.length; rowIndex++) {
+      const school = wsData[rowIndex][3] as string
+      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: 3 })
+      if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
+      worksheet[cellAddress].s = getSchoolStyle(school)
+    }
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
 
     // 生成Buffer
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
