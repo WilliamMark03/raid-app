@@ -21,6 +21,14 @@ export interface RaidRegistration {
   updated_at: string
 }
 
+export interface GroupWarning {
+  raid_date: string
+  raid_time_slot: string
+  group_number: number
+  linlin_count: number
+  warning: string
+}
+
 @Injectable()
 export class RaidRegistrationService {
   private getClient() {
@@ -88,22 +96,11 @@ export class RaidRegistrationService {
   /**
    * 获取所有报名记录
    */
-  async findAll(): Promise<RaidRegistration[]> {
+  async findAll(): Promise<{ data: RaidRegistration[], warnings: GroupWarning[] }> {
     const client = this.getClient()
     
-    const { data, error } = await client
-      .from('raid_registrations')
-      .select('*')
-      .order('raid_date', { ascending: true })
-      .order('raid_time_slot', { ascending: true })
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      throw new Error(`获取报名列表失败: ${error.message}`)
-    }
-
-    // 更新所有分组
-    await this.updateAllGroupNumbers()
+    // 更新所有分组并获取警告
+    const warnings = await this.updateAllGroupNumbers()
 
     // 重新获取
     const { data: updatedData, error: fetchError } = await client
@@ -111,13 +108,14 @@ export class RaidRegistrationService {
       .select('*')
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
+      .order('group_number', { ascending: true })
       .order('created_at', { ascending: true })
 
     if (fetchError) {
       throw new Error(`获取更新后列表失败: ${fetchError.message}`)
     }
 
-    return updatedData as RaidRegistration[]
+    return { data: updatedData as RaidRegistration[], warnings }
   }
 
   /**
@@ -154,42 +152,128 @@ export class RaidRegistrationService {
   }
 
   /**
-   * 更新指定日期时段的分组号
+   * 更新指定日期时段的分组号（考虑霖霖分配规则）
    */
-  private async updateGroupNumbers(raidDate: string, timeSlot: string): Promise<void> {
+  private async updateGroupNumbers(raidDate: string, timeSlot: string): Promise<GroupWarning[]> {
     const client = this.getClient()
     
     // 获取该时段的所有记录
     const { data: records, error } = await client
       .from('raid_registrations')
-      .select('id')
+      .select('id, school')
       .eq('raid_date', raidDate)
       .eq('raid_time_slot', timeSlot)
       .order('created_at', { ascending: true })
 
     if (error) {
       console.error('获取记录失败:', error)
-      return
+      return []
     }
 
     if (!records || records.length === 0) {
-      return
+      return []
     }
 
-    // 更新每条记录的组号（每10人一组）
-    for (let i = 0; i < records.length; i++) {
-      const groupNumber = Math.floor(i / 10) + 1
+    // 计算需要的组数（每10人一组）
+    const totalPeople = records.length
+    const groupCount = Math.ceil(totalPeople / 10)
+
+    // 区分霖霖和非霖霖
+    const linlinRecords: { id: number, school: string }[] = []
+    const otherRecords: { id: number, school: string }[] = []
+
+    for (const record of records) {
+      if (record.school === '霖霖') {
+        linlinRecords.push(record)
+      } else {
+        otherRecords.push(record)
+      }
+    }
+
+    const linlinCount = linlinRecords.length
+    const warnings: GroupWarning[] = []
+
+    // 为每个人分配组号
+    const assignments: { id: number, groupNumber: number }[] = []
+    
+    // 1. 先分配霖霖（每组最多2个）
+    let linlinIndex = 0
+    for (let g = 1; g <= groupCount; g++) {
+      // 每组分配最多2个霖霖
+      for (let i = 0; i < 2 && linlinIndex < linlinRecords.length; i++) {
+        assignments.push({
+          id: linlinRecords[linlinIndex].id,
+          groupNumber: g
+        })
+        linlinIndex++
+      }
+    }
+
+    // 2. 分配非霖霖成员
+    let otherIndex = 0
+    for (let g = 1; g <= groupCount && otherIndex < otherRecords.length; g++) {
+      // 计算该组已有多少霖霖
+      const groupLinlinCount = assignments.filter(a => a.groupNumber === g).length
+      const slotsAvailable = 10 - groupLinlinCount
+      
+      // 填充非霖霖成员
+      for (let i = 0; i < slotsAvailable && otherIndex < otherRecords.length; i++) {
+        assignments.push({
+          id: otherRecords[otherIndex].id,
+          groupNumber: g
+        })
+        otherIndex++
+      }
+    }
+
+    // 3. 如果还有剩余的非霖霖成员（理论上不应该发生，因为组数是按总人数算的）
+    while (otherIndex < otherRecords.length) {
+      const groupNum = (otherIndex % groupCount) + 1
+      assignments.push({
+        id: otherRecords[otherIndex].id,
+        groupNumber: groupNum
+      })
+      otherIndex++
+    }
+
+    // 4. 检查每组的霖霖数量，生成警告
+    for (let g = 1; g <= groupCount; g++) {
+      const groupLinlin = assignments.filter(a => a.groupNumber === g).filter(a => {
+        const record = linlinRecords.find(r => r.id === a.id)
+        return record !== undefined
+      }).length
+
+      if (groupLinlin < 2) {
+        const groupTotal = assignments.filter(a => a.groupNumber === g).length
+        if (groupTotal > 0) { // 只有非空组才警告
+          warnings.push({
+            raid_date: raidDate,
+            raid_time_slot: timeSlot,
+            group_number: g,
+            linlin_count: groupLinlin,
+            warning: groupLinlin === 0 
+              ? '该组缺少霖霖，请补充' 
+              : '该组霖霖仅1人，建议补充'
+          })
+        }
+      }
+    }
+
+    // 5. 更新数据库中的组号
+    for (const assignment of assignments) {
       await client
         .from('raid_registrations')
-        .update({ group_number: groupNumber })
-        .eq('id', records[i].id)
+        .update({ group_number: assignment.groupNumber })
+        .eq('id', assignment.id)
     }
+
+    return warnings
   }
 
   /**
    * 更新所有分组号
    */
-  private async updateAllGroupNumbers(): Promise<void> {
+  private async updateAllGroupNumbers(): Promise<GroupWarning[]> {
     const client = this.getClient()
     
     // 获取所有不同的日期+时段组合
@@ -198,7 +282,7 @@ export class RaidRegistrationService {
       .select('raid_date, raid_time_slot')
 
     if (error || !records) {
-      return
+      return []
     }
 
     // 去重
@@ -206,11 +290,15 @@ export class RaidRegistrationService {
       records.map(r => `${r.raid_date}_${r.raid_time_slot}`)
     )
 
-    // 更新每个组合的分组
+    // 更新每个组合的分组，收集所有警告
+    const allWarnings: GroupWarning[] = []
     for (const combo of uniqueCombinations) {
       const [date, timeSlot] = combo.split('_')
-      await this.updateGroupNumbers(date, timeSlot)
+      const warnings = await this.updateGroupNumbers(date, timeSlot)
+      allWarnings.push(...warnings)
     }
+
+    return allWarnings
   }
 
   /**
@@ -220,8 +308,8 @@ export class RaidRegistrationService {
     const XLSX = await import('xlsx')
     const client = this.getClient()
     
-    // 更新所有分组
-    await this.updateAllGroupNumbers()
+    // 更新所有分组并获取警告
+    const warnings = await this.updateAllGroupNumbers()
     
     // 获取所有记录
     const { data, error } = await client
@@ -237,21 +325,32 @@ export class RaidRegistrationService {
     }
 
     // 转换为Excel数据格式
-    const excelData = (data as RaidRegistration[]).map((item, index) => ({
-      '序号': index + 1,
-      '玩家ID': item.player_id,
-      '流派': item.school,
-      '是否指挥': item.is_commander ? '是' : '否',
-      '打本日期': item.raid_date,
-      '时间': item.raid_time_slot,
-      '组号': item.group_number,
-      '报名时间': new Date(item.created_at).toLocaleString('zh-CN')
-    }))
+    const excelData = data.map((record, index) => {
+      // 检查该记录所在组是否有警告
+      const groupWarning = warnings.find(w => 
+        w.raid_date === record.raid_date && 
+        w.raid_time_slot === record.raid_time_slot && 
+        w.group_number === record.group_number
+      )
+
+      return {
+        '序号': index + 1,
+        '玩家ID': record.player_id,
+        '流派': record.school,
+        '是否指挥': record.is_commander ? '是' : '否',
+        '打本日期': record.raid_date,
+        '时间': record.raid_time_slot,
+        '组号': record.group_number,
+        '分组提醒': groupWarning ? groupWarning.warning : '',
+        '报名时间': new Date(record.created_at).toLocaleString('zh-CN')
+      }
+    })
 
     // 创建工作簿
-    const workbook = XLSX.utils.book_new()
     const worksheet = XLSX.utils.json_to_sheet(excelData)
-    
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
+
     // 设置列宽
     worksheet['!cols'] = [
       { wch: 6 },   // 序号
@@ -261,11 +360,10 @@ export class RaidRegistrationService {
       { wch: 12 },  // 打本日期
       { wch: 12 },  // 时间
       { wch: 6 },   // 组号
-      { wch: 20 },  // 报名时间
+      { wch: 25 },  // 分组提醒
+      { wch: 20 }   // 报名时间
     ]
-    
-    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
-    
+
     // 生成Buffer
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
   }

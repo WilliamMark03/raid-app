@@ -35,6 +35,15 @@ interface RaidRegistration {
   created_at: string
 }
 
+// 分组警告类型
+interface GroupWarning {
+  raid_date: string
+  raid_time_slot: string
+  group_number: number
+  linlin_count: number
+  warning: string
+}
+
 // 分组类型
 interface GroupedRegistrations {
   [key: string]: RaidRegistration[]
@@ -48,6 +57,7 @@ export default function IndexPage() {
   const [isCommander, setIsCommander] = useState(false)
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
+  const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
 
@@ -78,7 +88,9 @@ export default function IndexPage() {
       
       if (res.data?.code === 200 && res.data?.data) {
         const data = res.data.data as RaidRegistration[]
+        const warningsData = res.data.warnings as GroupWarning[] || []
         setRegistrations(data)
+        setWarnings(warningsData)
         // 计算分组
         calculateGroups(data)
       }
@@ -357,26 +369,47 @@ export default function IndexPage() {
                     <Text className="text-xs text-gray-500">共 {members.length} 人</Text>
                   </View>
                   
-                  {Object.entries(groupsByNumber).map(([groupNum, groupMembers]) => (
-                    <View key={groupNum} className="mb-2">
-                      <Text className="text-sm font-medium text-gray-700 mb-1">
-                        第 {groupNum} 组 ({groupMembers.length}/10人)
-                      </Text>
-                      <View className="bg-gray-50 rounded-lg p-2">
-                        <View className="flex flex-wrap gap-2">
-                          {groupMembers.map(member => (
-                            <View key={member.id} className={`rounded-md px-2 py-1 border ${member.is_commander ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
-                              <Text className="text-xs text-gray-700">{member.player_id}</Text>
-                              {member.is_commander && (
-                                <Text className="text-xs text-amber-600 ml-1">★指挥</Text>
-                              )}
-                              <Text className="text-xs text-indigo-500 ml-1">·{member.school}</Text>
-                            </View>
-                          ))}
+                  {Object.entries(groupsByNumber).map(([groupNum, groupMembers]) => {
+                    // 计算该组霖霖数量
+                    const linlinCount = groupMembers.filter(m => m.school === '霖霖').length
+                    // 查找该组的警告
+                    const groupWarning = warnings.find(w => 
+                      w.raid_date === date && 
+                      w.raid_time_slot === timeSlot && 
+                      w.group_number === Number(groupNum)
+                    )
+                    
+                    return (
+                      <View key={groupNum} className="mb-2">
+                        <View className="flex items-center gap-2 mb-1">
+                          <Text className="text-sm font-medium text-gray-700">
+                            第 {groupNum} 组 ({groupMembers.length}/10人)
+                          </Text>
+                          <Badge variant="outline" className={`text-xs ${linlinCount >= 2 ? 'bg-green-50 text-green-600 border-green-200' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+                            霖霖×{linlinCount}
+                          </Badge>
+                        </View>
+                        {groupWarning && (
+                          <View className="bg-orange-50 border border-orange-200 rounded-md px-2 py-1 mb-1">
+                            <Text className="text-xs text-orange-600">⚠️ {groupWarning.warning}</Text>
+                          </View>
+                        )}
+                        <View className="bg-gray-50 rounded-lg p-2">
+                          <View className="flex flex-wrap gap-2">
+                            {groupMembers.map(member => (
+                              <View key={member.id} className={`rounded-md px-2 py-1 border ${member.is_commander ? 'bg-amber-50 border-amber-300' : member.school === '霖霖' ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}>
+                                <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                                {member.is_commander && (
+                                  <Text className="text-xs text-amber-600 ml-1">★指挥</Text>
+                                )}
+                                <Text className="text-xs text-indigo-500 ml-1">·{member.school}</Text>
+                              </View>
+                            ))}
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  ))}
+                    )
+                  })}
                   
                   <Separator className="my-3" />
                 </View>

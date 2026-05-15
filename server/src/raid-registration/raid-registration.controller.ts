@@ -10,7 +10,7 @@ import {
   Res
 } from '@nestjs/common'
 import { Response } from 'express'
-import { RaidRegistrationService, CreateRaidRegistrationDto, RaidRegistration } from './raid-registration.service'
+import { RaidRegistrationService, CreateRaidRegistrationDto, RaidRegistration, GroupWarning } from './raid-registration.service'
 
 @Controller('raid-registrations')
 export class RaidRegistrationController {
@@ -35,12 +35,12 @@ export class RaidRegistrationController {
    */
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll(): Promise<{ code: number; msg: string; data: RaidRegistration[] }> {
+  async findAll(): Promise<{ code: number; msg: string; data: RaidRegistration[]; warnings: GroupWarning[] }> {
     try {
-      const result = await this.service.findAll()
-      return { code: 200, msg: '获取成功', data: result }
+      const { data, warnings } = await this.service.findAll()
+      return { code: 200, msg: '获取成功', data, warnings }
     } catch (error) {
-      return { code: 400, msg: error.message, data: [] }
+      return { code: 400, msg: error.message, data: [], warnings: [] }
     }
   }
 
