@@ -209,4 +209,59 @@ export class RaidRegistrationService {
       await this.updateGroupNumbers(date, timeSlot)
     }
   }
+
+  /**
+   * 导出Excel统计数据
+   */
+  async exportExcel(): Promise<Buffer> {
+    const XLSX = await import('xlsx')
+    const client = this.getClient()
+    
+    // 更新所有分组
+    await this.updateAllGroupNumbers()
+    
+    // 获取所有记录
+    const { data, error } = await client
+      .from('raid_registrations')
+      .select('*')
+      .order('raid_date', { ascending: true })
+      .order('raid_time_slot', { ascending: true })
+      .order('group_number', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      throw new Error(`获取数据失败: ${error.message}`)
+    }
+
+    // 转换为Excel数据格式
+    const excelData = (data as RaidRegistration[]).map((item, index) => ({
+      '序号': index + 1,
+      '玩家ID': item.player_id,
+      '流派': item.school,
+      '打本日期': item.raid_date,
+      '时间': item.raid_time_slot,
+      '组号': item.group_number,
+      '报名时间': new Date(item.created_at).toLocaleString('zh-CN')
+    }))
+
+    // 创建工作簿
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(excelData)
+    
+    // 设置列宽
+    worksheet['!cols'] = [
+      { wch: 6 },   // 序号
+      { wch: 15 },  // 玩家ID
+      { wch: 10 },  // 流派
+      { wch: 12 },  // 打本日期
+      { wch: 12 },  // 时间
+      { wch: 6 },   // 组号
+      { wch: 20 },  // 报名时间
+    ]
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
+    
+    // 生成Buffer
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+  }
 }

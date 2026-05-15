@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
-import { Trash2, Users, Calendar, Clock } from 'lucide-react-taro'
+import { Trash2, Users, Calendar, Clock, Download } from 'lucide-react-taro'
 
 // 流派选项（燕云十六声门派）
 const SCHOOL_OPTIONS = [
@@ -47,6 +47,7 @@ export default function IndexPage() {
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
   const [loading, setLoading] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // 获取今天的日期字符串
   const getTodayDate = () => {
@@ -95,14 +96,6 @@ export default function IndexPage() {
         grouped[key] = []
       }
       grouped[key].push(reg)
-    })
-
-    // 为每个分组内的成员分配组号
-    Object.keys(grouped).forEach(key => {
-      const members = grouped[key]
-      members.forEach((member, index) => {
-        member.group_number = Math.floor(index / 10) + 1
-      })
     })
 
     setGroupedData(grouped)
@@ -164,6 +157,51 @@ export default function IndexPage() {
     } catch (error) {
       console.error('删除报名失败:', error)
       Taro.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
+
+  // 导出Excel
+  const handleExportExcel = async () => {
+    if (registrations.length === 0) {
+      Taro.showToast({ title: '暂无数据可导出', icon: 'none' })
+      return
+    }
+
+    setExporting(true)
+    try {
+      // H5端直接下载
+      if (Taro.getEnv() === 'WEB') {
+        const link = document.createElement('a')
+        link.href = '/api/raid-registrations/export/excel'
+        link.download = `打本报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        // 小程序端
+        Taro.downloadFile({
+          url: '/api/raid-registrations/export/excel',
+          success: (res) => {
+            if (res.statusCode === 200) {
+              Taro.openDocument({
+                filePath: res.tempFilePath,
+                fileType: 'xlsx',
+                success: () => {
+                  Taro.showToast({ title: '导出成功', icon: 'success' })
+                }
+              })
+            }
+          },
+          fail: () => {
+            Taro.showToast({ title: '导出失败', icon: 'none' })
+          }
+        })
+      }
+    } catch (error) {
+      console.error('导出Excel失败:', error)
+      Taro.showToast({ title: '导出失败', icon: 'none' })
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -266,10 +304,21 @@ export default function IndexPage() {
       {Object.keys(groupedData).length > 0 && (
         <Card className="mb-4">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center">
-              <Users size={18} color="#6366f1" className="mr-2" />
-              分组结果
-            </CardTitle>
+            <View className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base flex items-center">
+                <Users size={18} color="#6366f1" className="mr-2" />
+                分组结果
+              </CardTitle>
+              <Button
+                size="sm"
+                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                onClick={handleExportExcel}
+                disabled={exporting}
+              >
+                <Download size={14} color="#ffffff" className="mr-1" />
+                <Text className="text-white text-xs">{exporting ? '导出中...' : '导出Excel'}</Text>
+              </Button>
+            </View>
           </CardHeader>
           <CardContent>
             {Object.entries(groupedData).map(([key, members]) => {
@@ -333,6 +382,7 @@ export default function IndexPage() {
                     <View className="flex items-center gap-2">
                       <Text className="font-medium text-gray-900">{reg.player_id}</Text>
                       <Badge variant="secondary" className="text-xs">{reg.school}</Badge>
+                      <Badge variant="outline" className="text-xs text-gray-500">第{reg.group_number}组</Badge>
                     </View>
                     <Text className="text-xs text-gray-500 mt-1">
                       {reg.raid_date} {reg.raid_time_slot}

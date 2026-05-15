@@ -6,8 +6,10 @@ import {
   Body, 
   Param,
   HttpCode,
-  HttpStatus
+  HttpStatus,
+  Res
 } from '@nestjs/common'
+import { Response } from 'express'
 import { RaidRegistrationService, CreateRaidRegistrationDto, RaidRegistration } from './raid-registration.service'
 
 @Controller('raid-registrations')
@@ -53,6 +55,24 @@ export class RaidRegistrationController {
       return { code: 200, msg: '删除成功' }
     } catch (error) {
       return { code: 400, msg: error.message }
+    }
+  }
+
+  /**
+   * 导出Excel统计
+   */
+  @Get('export/excel')
+  async exportExcel(@Res() res: Response): Promise<void> {
+    try {
+      const buffer = await this.service.exportExcel()
+      const filename = `打本报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+      res.setHeader('Content-Length', buffer.length)
+      res.send(buffer)
+    } catch (error) {
+      res.status(400).json({ code: 400, msg: error.message })
     }
   }
 }
