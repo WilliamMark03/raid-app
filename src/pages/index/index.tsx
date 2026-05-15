@@ -12,7 +12,7 @@ import { Trash2, Users, Calendar, Clock } from 'lucide-react-taro'
 
 // 流派选项（燕云十六声门派）
 const SCHOOL_OPTIONS = [
-  '青溪', '狂澜', '孤云', '三更天', '醉花阴', '梨园', '天泉', '毗那夜迦'
+  '虹虹', '影影', '风风', '尘尘', '鸢鸢', '威威', '钧钧', '玉玉', '霖霖', '翊翊', '其它'
 ]
 
 // 时段选项
