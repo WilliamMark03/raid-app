@@ -28,6 +28,7 @@ interface RaidRegistration {
   id: number
   player_id: string
   school: string
+  is_commander: boolean
   raid_date: string
   raid_time_slot: string
   group_number: number
@@ -44,6 +45,7 @@ export default function IndexPage() {
   const [schoolIndex, setSchoolIndex] = useState(0)
   const [timeSlotIndex, setTimeSlotIndex] = useState(0)
   const [selectedDate, setSelectedDate] = useState('')
+  const [isCommander, setIsCommander] = useState(false)
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
   const [loading, setLoading] = useState(false)
@@ -120,6 +122,7 @@ export default function IndexPage() {
         data: {
           player_id: playerId.trim(),
           school: SCHOOL_OPTIONS[schoolIndex],
+          is_commander: isCommander,
           raid_date: selectedDate,
           raid_time_slot: TIME_SLOT_OPTIONS[timeSlotIndex].value
         }
@@ -129,6 +132,7 @@ export default function IndexPage() {
       if (res.data?.code === 200) {
         Taro.showToast({ title: '报名成功', icon: 'success' })
         setPlayerId('')
+        setIsCommander(false)
         fetchRegistrations()
       } else {
         Taro.showToast({ title: res.data?.msg || '报名失败', icon: 'none' })
@@ -289,6 +293,17 @@ export default function IndexPage() {
             </Picker>
           </View>
 
+          {/* 是否为指挥 */}
+          <View className="flex flex-row items-center justify-between py-2">
+            <Label className="text-sm text-gray-700">是否为指挥</Label>
+            <View 
+              className={`w-12 h-7 rounded-full p-1 ${isCommander ? 'bg-indigo-500' : 'bg-gray-300'}`}
+              onClick={() => setIsCommander(!isCommander)}
+            >
+              <View className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isCommander ? 'translate-x-5' : 'translate-x-0'}`} />
+            </View>
+          </View>
+
           {/* 提交按钮 */}
           <Button
             className="w-full bg-indigo-500 hover:bg-indigo-600 text-white"
@@ -350,8 +365,11 @@ export default function IndexPage() {
                       <View className="bg-gray-50 rounded-lg p-2">
                         <View className="flex flex-wrap gap-2">
                           {groupMembers.map(member => (
-                            <View key={member.id} className="bg-white rounded-md px-2 py-1 border border-gray-200">
+                            <View key={member.id} className={`rounded-md px-2 py-1 border ${member.is_commander ? 'bg-amber-50 border-amber-300' : 'bg-white border-gray-200'}`}>
                               <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                              {member.is_commander && (
+                                <Text className="text-xs text-amber-600 ml-1">★指挥</Text>
+                              )}
                               <Text className="text-xs text-indigo-500 ml-1">·{member.school}</Text>
                             </View>
                           ))}
@@ -382,6 +400,9 @@ export default function IndexPage() {
                     <View className="flex items-center gap-2">
                       <Text className="font-medium text-gray-900">{reg.player_id}</Text>
                       <Badge variant="secondary" className="text-xs">{reg.school}</Badge>
+                      {reg.is_commander && (
+                        <Badge className="text-xs bg-amber-500 text-white">指挥</Badge>
+                      )}
                       <Badge variant="outline" className="text-xs text-gray-500">第{reg.group_number}组</Badge>
                     </View>
                     <Text className="text-xs text-gray-500 mt-1">

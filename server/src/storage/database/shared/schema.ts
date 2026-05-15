@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, varchar, integer, index } from "drizzle-orm/pg-core"
+import { pgTable, serial, timestamp, varchar, integer, boolean, index } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -14,8 +14,9 @@ export const raidRegistrations = pgTable(
 		id: serial().primaryKey(),
 		player_id: varchar("player_id", { length: 50 }).notNull(),
 		school: varchar("school", { length: 20 }).notNull(),
+		is_commander: boolean("is_commander").default(false).notNull(), // 是否为指挥
 		raid_date: varchar("raid_date", { length: 10 }).notNull(), // 格式: YYYY-MM-DD
-		raid_time_slot: varchar("raid_time_slot", { length: 20 }).notNull(), // 上午/下午/晚上/深夜
+		raid_time_slot: varchar("raid_time_slot", { length: 20 }).notNull(), // 时段
 		group_number: integer("group_number").default(0), // 0表示未分组
 		created_at: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 		updated_at: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),

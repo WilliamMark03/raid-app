@@ -4,6 +4,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client'
 export interface CreateRaidRegistrationDto {
   player_id: string
   school: string
+  is_commander: boolean
   raid_date: string
   raid_time_slot: string
 }
@@ -12,6 +13,7 @@ export interface RaidRegistration {
   id: number
   player_id: string
   school: string
+  is_commander: boolean
   raid_date: string
   raid_time_slot: string
   group_number: number
@@ -54,6 +56,7 @@ export class RaidRegistrationService {
       .insert({
         player_id: dto.player_id,
         school: dto.school,
+        is_commander: dto.is_commander || false,
         raid_date: dto.raid_date,
         raid_time_slot: dto.raid_time_slot,
         group_number: 0
@@ -238,6 +241,7 @@ export class RaidRegistrationService {
       '序号': index + 1,
       '玩家ID': item.player_id,
       '流派': item.school,
+      '是否指挥': item.is_commander ? '是' : '否',
       '打本日期': item.raid_date,
       '时间': item.raid_time_slot,
       '组号': item.group_number,
@@ -253,6 +257,7 @@ export class RaidRegistrationService {
       { wch: 6 },   // 序号
       { wch: 15 },  // 玩家ID
       { wch: 10 },  // 流派
+      { wch: 10 },  // 是否指挥
       { wch: 12 },  // 打本日期
       { wch: 12 },  // 时间
       { wch: 6 },   // 组号
