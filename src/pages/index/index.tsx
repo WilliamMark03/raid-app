@@ -10,9 +10,9 @@ import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Trash2, Users, Calendar, Clock } from 'lucide-react-taro'
 
-// 流派选项
+// 流派选项（燕云十六声门派）
 const SCHOOL_OPTIONS = [
-  '剑宗', '气宗', '刺客', '医仙', '魔尊', '法师', '射手', '战士'
+  '青溪', '狂澜', '孤云', '三更天', '醉花阴', '梨园', '天泉', '毗那夜迦'
 ]
 
 // 时段选项
