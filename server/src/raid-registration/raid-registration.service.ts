@@ -9,6 +9,7 @@ export interface CreateRaidRegistrationDto {
   raid_date: string
   raid_time_slot: string
   team?: string // 小队：进攻组、防守组（百业战报名专用）
+  remark?: string // 备注
 }
 
 export interface RaidRegistration {
@@ -20,6 +21,7 @@ export interface RaidRegistration {
   raid_date: string
   raid_time_slot: string
   team: string | null
+  remark: string | null
   group_number: number
   created_at: string
   updated_at: string
@@ -74,6 +76,7 @@ export class RaidRegistrationService {
         raid_date: dto.raid_date,
         raid_time_slot: dto.raid_time_slot,
         team: dto.team || null,
+        remark: dto.remark || null,
         group_number: 0
       })
       .select()
@@ -443,6 +446,7 @@ export class RaidRegistrationService {
         '小队': record.team || '-',
         '组号': record.registration_type === '打本报名' ? record.group_number : '-',
         '分组提醒': groupWarning?.warning || '',
+        '备注': record.remark || '',
         '报名时间': new Date(record.created_at).toLocaleString('zh-CN')
       }
     })
@@ -464,6 +468,7 @@ export class RaidRegistrationService {
       { wch: 10 },  // 小队
       { wch: 6 },   // 组号
       { wch: 25 },  // 分组提醒
+      { wch: 30 },  // 备注
       { wch: 20 }   // 报名时间
     ]
 

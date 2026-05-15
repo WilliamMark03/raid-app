@@ -14,6 +14,8 @@ import { Trash2, Users, Calendar, Clock, Download } from 'lucide-react-taro'
 const REGISTRATION_TYPE_OPTIONS = [
   { value: '打本报名', label: '打本报名' },
   { value: '百业战报名', label: '百业战报名' },
+  { value: '觉瘴林报名', label: '觉瘴林报名' },
+  { value: '竞技活动报名', label: '竞技活动报名' },
   { value: '其他活动报名', label: '其他活动报名' }
 ]
 
@@ -53,6 +55,7 @@ interface RaidRegistration {
   raid_date: string
   raid_time_slot: string
   team: string | null
+  remark: string | null
   group_number: number
   created_at: string
 }
@@ -80,9 +83,12 @@ export default function IndexPage() {
   const [teamIndex, setTeamIndex] = useState(0)
   const [selectedDate, setSelectedDate] = useState('')
   const [isCommander, setIsCommander] = useState(false)
+  const [remark, setRemark] = useState('')
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
   const [baiyeData, setBaiyeData] = useState<GroupedRegistrations>({})
+  const [juezhanglinData, setJuezhanglinData] = useState<GroupedRegistrations>({})
+  const [jingjiData, setJingjiData] = useState<GroupedRegistrations>({})
   const [otherActivityData, setOtherActivityData] = useState<GroupedRegistrations>({})
   const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [loading, setLoading] = useState(false)
@@ -95,6 +101,8 @@ export default function IndexPage() {
   const showDatePicker = currentRegistrationType !== '百业战报名'
   const showBaiyeOptions = currentRegistrationType === '百业战报名'
   const showTimeSlotPicker = currentRegistrationType === '打本报名'
+  // 只有打本报名和百业战报名显示指挥按钮
+  const showCommanderToggle = currentRegistrationType === '打本报名' || currentRegistrationType === '百业战报名'
 
   // 获取今天的日期字符串
   const getTodayDate = () => {
@@ -138,9 +146,11 @@ export default function IndexPage() {
   const calculateGroups = (data: RaidRegistration[]) => {
     const raidGrouped: GroupedRegistrations = {}
     const baiyeGrouped: GroupedRegistrations = {}
+    const juezhanglinGrouped: GroupedRegistrations = {}
+    const jingjiGrouped: GroupedRegistrations = {}
     const otherGrouped: GroupedRegistrations = {}
     
-    // 分离打本报名、百业战报名和其他活动报名
+    // 分离不同报名类型
     data.forEach(reg => {
       const key = `${reg.raid_date}_${reg.raid_time_slot}`
       
@@ -156,6 +166,16 @@ export default function IndexPage() {
           baiyeGrouped[baiyeKey] = []
         }
         baiyeGrouped[baiyeKey].push(reg)
+      } else if (reg.registration_type === '觉瘴林报名') {
+        if (!juezhanglinGrouped[key]) {
+          juezhanglinGrouped[key] = []
+        }
+        juezhanglinGrouped[key].push(reg)
+      } else if (reg.registration_type === '竞技活动报名') {
+        if (!jingjiGrouped[key]) {
+          jingjiGrouped[key] = []
+        }
+        jingjiGrouped[key].push(reg)
       } else {
         if (!otherGrouped[key]) {
           otherGrouped[key] = []
@@ -166,6 +186,8 @@ export default function IndexPage() {
 
     setGroupedData(raidGrouped)
     setBaiyeData(baiyeGrouped)
+    setJuezhanglinData(juezhanglinGrouped)
+    setJingjiData(jingjiGrouped)
     setOtherActivityData(otherGrouped)
   }
 
@@ -189,7 +211,8 @@ export default function IndexPage() {
         registration_type: currentRegistrationType,
         player_id: playerId.trim(),
         school: SCHOOL_OPTIONS[schoolIndex],
-        is_commander: isCommander
+        is_commander: showCommanderToggle ? isCommander : false,
+        remark: remark.trim() || null
       }
       
       if (currentRegistrationType === '打本报名') {
@@ -215,6 +238,7 @@ export default function IndexPage() {
         Taro.showToast({ title: '报名成功', icon: 'success' })
         setPlayerId('')
         setIsCommander(false)
+        setRemark('')
         fetchRegistrations()
       } else {
         Taro.showToast({ title: res.data?.msg || '报名失败', icon: 'none' })
@@ -314,6 +338,8 @@ export default function IndexPage() {
   // 统计人数
   const raidCount = registrations.filter(r => r.registration_type === '打本报名').length
   const baiyeCount = registrations.filter(r => r.registration_type === '百业战报名').length
+  const juezhanglinCount = registrations.filter(r => r.registration_type === '觉瘴林报名').length
+  const jingjiCount = registrations.filter(r => r.registration_type === '竞技活动报名').length
   const otherCount = registrations.filter(r => r.registration_type === '其他活动报名').length
   const totalCount = registrations.length
 
@@ -324,13 +350,19 @@ export default function IndexPage() {
         <Text className="block text-xl font-bold text-gray-900">活动报名</Text>
         <View className="flex flex-row gap-4 mt-1 flex-wrap">
           <Text className="block text-sm text-gray-500">
-            打本报名 <Text className="text-indigo-500 font-semibold">{raidCount}</Text> 人
+            打本 <Text className="text-indigo-500 font-semibold">{raidCount}</Text> 人
           </Text>
           <Text className="block text-sm text-gray-500">
-            百业战报名 <Text className="text-orange-500 font-semibold">{baiyeCount}</Text> 人
+            百业战 <Text className="text-orange-500 font-semibold">{baiyeCount}</Text> 人
           </Text>
           <Text className="block text-sm text-gray-500">
-            其他活动 <Text className="text-emerald-500 font-semibold">{otherCount}</Text> 人
+            觉瘴林 <Text className="text-teal-500 font-semibold">{juezhanglinCount}</Text> 人
+          </Text>
+          <Text className="block text-sm text-gray-500">
+            竞技 <Text className="text-rose-500 font-semibold">{jingjiCount}</Text> 人
+          </Text>
+          <Text className="block text-sm text-gray-500">
+            其他 <Text className="text-emerald-500 font-semibold">{otherCount}</Text> 人
           </Text>
         </View>
       </View>
@@ -439,14 +471,30 @@ export default function IndexPage() {
             </View>
           )}
 
-          {/* 是否为指挥 */}
-          <View className="flex flex-row items-center justify-between py-2">
-            <Label className="text-sm text-gray-700">是否为指挥</Label>
-            <View 
-              className={`w-12 h-7 rounded-full p-1 ${isCommander ? 'bg-indigo-500' : 'bg-gray-300'}`}
-              onClick={() => setIsCommander(!isCommander)}
-            >
-              <View className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isCommander ? 'translate-x-5' : 'translate-x-0'}`} />
+          {/* 是否为指挥 - 仅打本报名和百业战报名显示 */}
+          {showCommanderToggle && (
+            <View className="flex flex-row items-center justify-between py-2">
+              <Label className="text-sm text-gray-700">是否为指挥</Label>
+              <View 
+                className={`w-12 h-7 rounded-full p-1 ${isCommander ? 'bg-indigo-500' : 'bg-gray-300'}`}
+                onClick={() => setIsCommander(!isCommander)}
+              >
+                <View className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isCommander ? 'translate-x-5' : 'translate-x-0'}`} />
+              </View>
+            </View>
+          )}
+
+          {/* 备注 */}
+          <View className="mb-2">
+            <Label className="text-sm text-gray-700 mb-1 block">备注（选填）</Label>
+            <View className="bg-gray-50 rounded-xl px-4 py-3">
+              <Input
+                className="w-full bg-transparent"
+                placeholder="请输入注意事项..."
+                value={remark}
+                onInput={(e) => setRemark(e.detail.value)}
+                maxlength={100}
+              />
             </View>
           </View>
 
@@ -455,6 +503,8 @@ export default function IndexPage() {
             className={`w-full text-white ${
               currentRegistrationType === '打本报名' ? 'bg-indigo-500 hover:bg-indigo-600' :
               currentRegistrationType === '百业战报名' ? 'bg-orange-500 hover:bg-orange-600' :
+              currentRegistrationType === '觉瘴林报名' ? 'bg-teal-500 hover:bg-teal-600' :
+              currentRegistrationType === '竞技活动报名' ? 'bg-rose-500 hover:bg-rose-600' :
               'bg-emerald-500 hover:bg-emerald-600'
             }`}
             onClick={handleSubmit}
@@ -544,12 +594,26 @@ export default function IndexPage() {
                                 {member.is_commander && (
                                   <Badge className="bg-amber-100 text-amber-700 text-xs px-1">★指挥</Badge>
                                 )}
+                                {member.remark && (
+                                  <Text className="text-xs text-indigo-500">📝</Text>
+                                )}
                                 <View onClick={() => handleDelete(member.id)} className="ml-1">
                                   <Trash2 size={14} color="#ef4444" />
                                 </View>
                               </View>
                             ))}
                           </View>
+                          {/* 显示备注 */}
+                          {groupMembers.filter(m => m.remark).length > 0 && (
+                            <View className="mt-2 pt-2 border-t border-gray-200">
+                              {groupMembers.filter(m => m.remark).map(member => (
+                                <View key={member.id} className="flex items-center gap-1 mb-1">
+                                  <Text className="text-xs text-gray-600">{member.player_id}:</Text>
+                                  <Text className="text-xs text-indigo-600">{member.remark}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
                         </View>
                       </View>
                     )
@@ -595,12 +659,27 @@ export default function IndexPage() {
                           {member.is_commander && (
                             <Badge className="bg-amber-100 text-amber-700 text-xs px-1">★指挥</Badge>
                           )}
+                          {member.remark && (
+                            <Text className="text-xs text-emerald-500">📝</Text>
+                          )}
                           <View onClick={() => handleDelete(member.id)} className="ml-1">
                             <Trash2 size={14} color="#ef4444" />
                           </View>
                         </View>
                       ))}
                     </View>
+                    {/* 显示备注 */}
+                    {members.filter(m => m.remark).length > 0 && (
+                      <View className="mt-2 pt-2 border-t border-gray-200">
+                        <Text className="text-xs text-gray-500 mb-1">备注：</Text>
+                        {members.filter(m => m.remark).map(member => (
+                          <View key={member.id} className="flex items-center gap-1 mb-1">
+                            <Text className="text-xs text-gray-600">{member.player_id}:</Text>
+                            <Text className="text-xs text-emerald-600">{member.remark}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 </View>
               )
@@ -645,12 +724,147 @@ export default function IndexPage() {
                           {member.is_commander && (
                             <Badge className="bg-amber-100 text-amber-700 text-xs">指挥</Badge>
                           )}
+                          {member.remark && (
+                            <Text className="text-xs text-orange-500">📝</Text>
+                          )}
                         </View>
                         <View onClick={() => handleDelete(member.id)}>
                           <Trash2 size={16} color="#ef4444" />
                         </View>
                       </View>
                     ))}
+                    {/* 显示备注 */}
+                    {members.filter(m => m.remark).length > 0 && (
+                      <View className="mt-2 pt-2 border-t border-gray-200">
+                        <Text className="text-xs text-gray-500 mb-1">备注：</Text>
+                        {members.filter(m => m.remark).map(member => (
+                          <View key={member.id} className="flex items-center gap-1 mb-1">
+                            <Text className="text-xs text-gray-600">{member.player_id}:</Text>
+                            <Text className="text-xs text-orange-600">{member.remark}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 觉瘴林报名区域 */}
+      {Object.keys(juezhanglinData).length > 0 && (
+        <Card className="mb-4 border-teal-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center">
+              <Users size={18} color="#14b8a6" className="mr-2" />
+              觉瘴林报名
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {Object.entries(juezhanglinData).map(([key, members]) => {
+              const [date, timeSlot] = key.split('_')
+              
+              return (
+                <View key={key} className="mb-4 last:mb-0">
+                  <View className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-teal-50 text-teal-600 border-teal-200">
+                      {date} {timeSlot !== '全天' ? timeSlot : ''}
+                    </Badge>
+                    <Text className="text-xs text-gray-500">共 {members.length} 人</Text>
+                  </View>
+                  
+                  <View className="bg-gray-50 rounded-lg p-2">
+                    <View className="flex flex-wrap gap-2">
+                      {members.map(member => (
+                        <View 
+                          key={member.id} 
+                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-gray-200"
+                        >
+                          <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                          <Text className="text-xs text-gray-400">({member.school})</Text>
+                          {member.remark && (
+                            <Text className="text-xs text-teal-500">📝</Text>
+                          )}
+                          <View onClick={() => handleDelete(member.id)} className="ml-1">
+                            <Trash2 size={14} color="#ef4444" />
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                    {/* 显示备注 */}
+                    {members.filter(m => m.remark).length > 0 && (
+                      <View className="mt-2 pt-2 border-t border-gray-200">
+                        <Text className="text-xs text-gray-500 mb-1">备注：</Text>
+                        {members.filter(m => m.remark).map(member => (
+                          <View key={member.id} className="flex items-center gap-1 mb-1">
+                            <Text className="text-xs text-gray-600">{member.player_id}:</Text>
+                            <Text className="text-xs text-teal-600">{member.remark}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 竞技活动报名区域 */}
+      {Object.keys(jingjiData).length > 0 && (
+        <Card className="mb-4 border-rose-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center">
+              <Users size={18} color="#f43f5e" className="mr-2" />
+              竞技活动报名
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {Object.entries(jingjiData).map(([key, members]) => {
+              const [date, timeSlot] = key.split('_')
+              
+              return (
+                <View key={key} className="mb-4 last:mb-0">
+                  <View className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-rose-50 text-rose-600 border-rose-200">
+                      {date} {timeSlot !== '全天' ? timeSlot : ''}
+                    </Badge>
+                    <Text className="text-xs text-gray-500">共 {members.length} 人</Text>
+                  </View>
+                  
+                  <View className="bg-gray-50 rounded-lg p-2">
+                    <View className="flex flex-wrap gap-2">
+                      {members.map(member => (
+                        <View 
+                          key={member.id} 
+                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-gray-200"
+                        >
+                          <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                          <Text className="text-xs text-gray-400">({member.school})</Text>
+                          {member.remark && (
+                            <Text className="text-xs text-rose-500">📝</Text>
+                          )}
+                          <View onClick={() => handleDelete(member.id)} className="ml-1">
+                            <Trash2 size={14} color="#ef4444" />
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                    {/* 显示备注 */}
+                    {members.filter(m => m.remark).length > 0 && (
+                      <View className="mt-2 pt-2 border-t border-gray-200">
+                        <Text className="text-xs text-gray-500 mb-1">备注：</Text>
+                        {members.filter(m => m.remark).map(member => (
+                          <View key={member.id} className="flex items-center gap-1 mb-1">
+                            <Text className="text-xs text-gray-600">{member.player_id}:</Text>
+                            <Text className="text-xs text-rose-600">{member.remark}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 </View>
               )

@@ -19,6 +19,7 @@ export const raidRegistrations = pgTable(
 		raid_date: varchar("raid_date", { length: 20 }).notNull(), // 格式: YYYY-MM-DD 或 周六/周日/周六及周日
 		raid_time_slot: varchar("raid_time_slot", { length: 20 }).notNull(), // 时段
 		team: varchar("team", { length: 20 }), // 小队：进攻组、防守组（百业战报名专用）
+		remark: varchar("remark", { length: 200 }), // 备注
 		group_number: integer("group_number").default(0), // 0表示未分组
 		created_at: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 		updated_at: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
