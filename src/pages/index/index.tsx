@@ -10,6 +10,12 @@ import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Trash2, Users, Calendar, Clock, Download } from 'lucide-react-taro'
 
+// 报名类型选项
+const REGISTRATION_TYPE_OPTIONS = [
+  { value: '打本报名', label: '打本报名' },
+  { value: '其他活动报名', label: '其他活动报名' }
+]
+
 // 流派选项（燕云十六声门派）
 const SCHOOL_OPTIONS = [
   '虹虹', '影影', '风风', '尘尘', '鸢鸢', '威威', '钧钧', '玉玉', '霖霖', '翊翊', '其它'
@@ -26,6 +32,7 @@ const TIME_SLOT_OPTIONS = [
 // 报名记录类型
 interface RaidRegistration {
   id: number
+  registration_type: string
   player_id: string
   school: string
   is_commander: boolean
@@ -50,6 +57,7 @@ interface GroupedRegistrations {
 }
 
 export default function IndexPage() {
+  const [registrationTypeIndex, setRegistrationTypeIndex] = useState(0)
   const [playerId, setPlayerId] = useState('')
   const [schoolIndex, setSchoolIndex] = useState(0)
   const [timeSlotIndex, setTimeSlotIndex] = useState(0)
@@ -57,6 +65,7 @@ export default function IndexPage() {
   const [isCommander, setIsCommander] = useState(false)
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
+  const [otherActivityData, setOtherActivityData] = useState<GroupedRegistrations>({})
   const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -99,20 +108,30 @@ export default function IndexPage() {
     }
   }
 
-  // 计算分组（按日期+时段分组，每组最多10人）
+  // 计算分组（按报名类型、日期+时段分组）
   const calculateGroups = (data: RaidRegistration[]) => {
-    const grouped: GroupedRegistrations = {}
+    const raidGrouped: GroupedRegistrations = {}
+    const otherGrouped: GroupedRegistrations = {}
     
-    // 按日期+时段分组
+    // 分离打本报名和其他活动报名
     data.forEach(reg => {
       const key = `${reg.raid_date}_${reg.raid_time_slot}`
-      if (!grouped[key]) {
-        grouped[key] = []
+      
+      if (reg.registration_type === '打本报名') {
+        if (!raidGrouped[key]) {
+          raidGrouped[key] = []
+        }
+        raidGrouped[key].push(reg)
+      } else {
+        if (!otherGrouped[key]) {
+          otherGrouped[key] = []
+        }
+        otherGrouped[key].push(reg)
       }
-      grouped[key].push(reg)
     })
 
-    setGroupedData(grouped)
+    setGroupedData(raidGrouped)
+    setOtherActivityData(otherGrouped)
   }
 
   // 提交报名
@@ -122,7 +141,7 @@ export default function IndexPage() {
       return
     }
     if (!selectedDate) {
-      Taro.showToast({ title: '请选择打本日期', icon: 'none' })
+      Taro.showToast({ title: '请选择日期', icon: 'none' })
       return
     }
 
@@ -132,6 +151,7 @@ export default function IndexPage() {
         url: '/api/raid-registrations',
         method: 'POST',
         data: {
+          registration_type: REGISTRATION_TYPE_OPTIONS[registrationTypeIndex].value,
           player_id: playerId.trim(),
           school: SCHOOL_OPTIONS[schoolIndex],
           is_commander: isCommander,
@@ -189,7 +209,7 @@ export default function IndexPage() {
       if (Taro.getEnv() === 'WEB') {
         const link = document.createElement('a')
         link.href = '/api/raid-registrations/export/excel'
-        link.download = `打本报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+        link.download = `活动报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -226,6 +246,11 @@ export default function IndexPage() {
     setSelectedDate(e.detail.value)
   }
 
+  // 报名类型选择变化
+  const handleRegistrationTypeChange = (e) => {
+    setRegistrationTypeIndex(Number(e.detail.value))
+  }
+
   // 流派选择变化
   const handleSchoolChange = (e) => {
     setSchoolIndex(Number(e.detail.value))
@@ -236,17 +261,24 @@ export default function IndexPage() {
     setTimeSlotIndex(Number(e.detail.value))
   }
 
-  // 统计总人数
+  // 统计人数
+  const raidCount = registrations.filter(r => r.registration_type === '打本报名').length
+  const otherCount = registrations.filter(r => r.registration_type === '其他活动报名').length
   const totalCount = registrations.length
 
   return (
     <View className="min-h-full bg-gray-50 p-4 pb-20">
       {/* 标题区 */}
       <View className="mb-4">
-        <Text className="block text-xl font-bold text-gray-900">打本报名</Text>
-        <Text className="block text-sm text-gray-500 mt-1">
-          当前已报名 <Text className="text-indigo-500 font-semibold">{totalCount}</Text> 人
-        </Text>
+        <Text className="block text-xl font-bold text-gray-900">活动报名</Text>
+        <View className="flex flex-row gap-4 mt-1">
+          <Text className="block text-sm text-gray-500">
+            打本报名 <Text className="text-indigo-500 font-semibold">{raidCount}</Text> 人
+          </Text>
+          <Text className="block text-sm text-gray-500">
+            其他活动 <Text className="text-emerald-500 font-semibold">{otherCount}</Text> 人
+          </Text>
+        </View>
       </View>
 
       {/* 报名表单区 */}
@@ -255,6 +287,17 @@ export default function IndexPage() {
           <CardTitle className="text-base">填写报名信息</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 报名类型 */}
+          <View>
+            <Label className="text-sm text-gray-700 mb-1 block">报名类型</Label>
+            <Picker mode="selector" range={REGISTRATION_TYPE_OPTIONS.map(t => t.label)} value={registrationTypeIndex} onChange={handleRegistrationTypeChange}>
+              <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
+                <Text className="text-gray-900">{REGISTRATION_TYPE_OPTIONS[registrationTypeIndex].label}</Text>
+                <Text className="text-gray-400 text-sm">▼</Text>
+              </View>
+            </Picker>
+          </View>
+
           {/* 玩家ID */}
           <View>
             <Label className="text-sm text-gray-700 mb-1 block">玩家ID</Label>
@@ -281,9 +324,9 @@ export default function IndexPage() {
             </Picker>
           </View>
 
-          {/* 打本日期 */}
+          {/* 活动日期 */}
           <View>
-            <Label className="text-sm text-gray-700 mb-1 block">打本日期</Label>
+            <Label className="text-sm text-gray-700 mb-1 block">活动日期</Label>
             <Picker mode="date" value={selectedDate} start={getTodayDate()} onChange={handleDateChange}>
               <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
                 <Text className={selectedDate ? 'text-gray-900' : 'text-gray-400'}>
@@ -294,9 +337,9 @@ export default function IndexPage() {
             </Picker>
           </View>
 
-          {/* 打本时段 */}
+          {/* 活动时段 */}
           <View>
-            <Label className="text-sm text-gray-700 mb-1 block">打本时段</Label>
+            <Label className="text-sm text-gray-700 mb-1 block">活动时段</Label>
             <Picker mode="selector" range={TIME_SLOT_OPTIONS.map(t => t.label)} value={timeSlotIndex} onChange={handleTimeSlotChange}>
               <View className="bg-gray-50 rounded-lg px-3 py-2 flex justify-between items-center">
                 <Text className="text-gray-900">{TIME_SLOT_OPTIONS[timeSlotIndex].label}</Text>
@@ -318,7 +361,7 @@ export default function IndexPage() {
 
           {/* 提交按钮 */}
           <Button
-            className="w-full bg-indigo-500 hover:bg-indigo-600 text-white"
+            className={`w-full text-white ${registrationTypeIndex === 0 ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
             onClick={handleSubmit}
             disabled={loading}
           >
@@ -327,14 +370,14 @@ export default function IndexPage() {
         </CardContent>
       </Card>
 
-      {/* 分组结果区 */}
+      {/* 打本报名分组结果区 */}
       {Object.keys(groupedData).length > 0 && (
         <Card className="mb-4">
           <CardHeader className="pb-2">
             <View className="flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center">
                 <Users size={18} color="#6366f1" className="mr-2" />
-                分组结果
+                打本报名分组
               </CardTitle>
               <Button
                 size="sm"
@@ -397,12 +440,18 @@ export default function IndexPage() {
                         <View className="bg-gray-50 rounded-lg p-2">
                           <View className="flex flex-wrap gap-2">
                             {groupMembers.map(member => (
-                              <View key={member.id} className={`rounded-md px-2 py-1 border ${member.is_commander ? 'bg-amber-50 border-amber-300' : member.school === '霖霖' ? 'bg-blue-50 border-blue-300' : 'bg-white border-gray-200'}`}>
+                              <View 
+                                key={member.id} 
+                                className={`flex items-center gap-1 px-2 py-1 rounded-md ${member.school === '霖霖' ? 'bg-blue-100' : 'bg-white border border-gray-200'}`}
+                              >
                                 <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                                <Text className="text-xs text-gray-400">({member.school})</Text>
                                 {member.is_commander && (
-                                  <Text className="text-xs text-amber-600 ml-1">★指挥</Text>
+                                  <Badge className="bg-amber-100 text-amber-700 text-xs px-1">★指挥</Badge>
                                 )}
-                                <Text className="text-xs text-indigo-500 ml-1">·{member.school}</Text>
+                                <View onClick={() => handleDelete(member.id)} className="ml-1">
+                                  <Trash2 size={14} color="#ef4444" />
+                                </View>
                               </View>
                             ))}
                           </View>
@@ -410,8 +459,6 @@ export default function IndexPage() {
                       </View>
                     )
                   })}
-                  
-                  <Separator className="my-3" />
                 </View>
               )
             })}
@@ -419,51 +466,59 @@ export default function IndexPage() {
         </Card>
       )}
 
-      {/* 报名列表区 */}
-      {registrations.length > 0 && (
-        <Card>
+      {/* 其他活动报名列表 */}
+      {Object.keys(otherActivityData).length > 0 && (
+        <Card className="mb-4">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">报名列表</CardTitle>
+            <CardTitle className="text-base flex items-center">
+              <Users size={18} color="#10b981" className="mr-2" />
+              其他活动报名
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            {registrations.map((reg, index) => (
-              <View key={reg.id}>
-                <View className="flex items-center justify-between px-4 py-3">
-                  <View className="flex-1">
-                    <View className="flex items-center gap-2">
-                      <Text className="font-medium text-gray-900">{reg.player_id}</Text>
-                      <Badge variant="secondary" className="text-xs">{reg.school}</Badge>
-                      {reg.is_commander && (
-                        <Badge className="text-xs bg-amber-500 text-white">指挥</Badge>
-                      )}
-                      <Badge variant="outline" className="text-xs text-gray-500">第{reg.group_number}组</Badge>
-                    </View>
-                    <Text className="text-xs text-gray-500 mt-1">
-                      {reg.raid_date} {reg.raid_time_slot}
-                    </Text>
+          <CardContent>
+            {Object.entries(otherActivityData).map(([key, members]) => {
+              const [date, timeSlot] = key.split('_')
+
+              return (
+                <View key={key} className="mb-4 last:mb-0">
+                  <View className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200">
+                      {date} {timeSlot}
+                    </Badge>
+                    <Text className="text-xs text-gray-500">共 {members.length} 人</Text>
                   </View>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-600"
-                    onClick={() => handleDelete(reg.id)}
-                  >
-                    <Trash2 size={16} color="#ef4444" />
-                  </Button>
+                  
+                  <View className="bg-gray-50 rounded-lg p-2">
+                    <View className="flex flex-wrap gap-2">
+                      {members.map(member => (
+                        <View 
+                          key={member.id} 
+                          className="flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-gray-200"
+                        >
+                          <Text className="text-xs text-gray-700">{member.player_id}</Text>
+                          <Text className="text-xs text-gray-400">({member.school})</Text>
+                          {member.is_commander && (
+                            <Badge className="bg-amber-100 text-amber-700 text-xs px-1">★指挥</Badge>
+                          )}
+                          <View onClick={() => handleDelete(member.id)} className="ml-1">
+                            <Trash2 size={14} color="#ef4444" />
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
                 </View>
-                {index < registrations.length - 1 && <Separator />}
-              </View>
-            ))}
+              )
+            })}
           </CardContent>
         </Card>
       )}
 
       {/* 空状态 */}
-      {registrations.length === 0 && (
+      {totalCount === 0 && (
         <Card>
-          <CardContent className="py-12 text-center">
+          <CardContent className="py-8 text-center">
             <Text className="text-gray-400">暂无报名记录</Text>
-            <Text className="text-sm text-gray-400 mt-1">快来第一个报名吧！</Text>
           </CardContent>
         </Card>
       )}

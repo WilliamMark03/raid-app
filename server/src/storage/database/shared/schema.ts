@@ -12,6 +12,7 @@ export const raidRegistrations = pgTable(
 	"raid_registrations",
 	{
 		id: serial().primaryKey(),
+		registration_type: varchar("registration_type", { length: 20 }).default("打本报名").notNull(), // 报名类型：打本报名、其他活动报名
 		player_id: varchar("player_id", { length: 50 }).notNull(),
 		school: varchar("school", { length: 20 }).notNull(),
 		is_commander: boolean("is_commander").default(false).notNull(), // 是否为指挥
@@ -22,6 +23,7 @@ export const raidRegistrations = pgTable(
 		updated_at: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 	},
 	(table) => [
+		index("raid_registrations_registration_type_idx").on(table.registration_type),
 		index("raid_registrations_raid_date_idx").on(table.raid_date),
 		index("raid_registrations_raid_time_slot_idx").on(table.raid_time_slot),
 		index("raid_registrations_group_number_idx").on(table.group_number),

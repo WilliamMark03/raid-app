@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { getSupabaseClient } from '@/storage/database/supabase-client'
 
 export interface CreateRaidRegistrationDto {
+  registration_type: string
   player_id: string
   school: string
   is_commander: boolean
@@ -11,6 +12,7 @@ export interface CreateRaidRegistrationDto {
 
 export interface RaidRegistration {
   id: number
+  registration_type: string
   player_id: string
   school: string
   is_commander: boolean
@@ -48,6 +50,7 @@ export class RaidRegistrationService {
       .eq('player_id', dto.player_id)
       .eq('raid_date', dto.raid_date)
       .eq('raid_time_slot', dto.raid_time_slot)
+      .eq('registration_type', dto.registration_type || '打本报名')
       .maybeSingle()
 
     if (checkError) {
@@ -62,6 +65,7 @@ export class RaidRegistrationService {
     const { data, error } = await client
       .from('raid_registrations')
       .insert({
+        registration_type: dto.registration_type || '打本报名',
         player_id: dto.player_id,
         school: dto.school,
         is_commander: dto.is_commander || false,
@@ -76,8 +80,10 @@ export class RaidRegistrationService {
       throw new Error(`创建报名失败: ${error.message}`)
     }
 
-    // 更新分组号
-    await this.updateGroupNumbers(dto.raid_date, dto.raid_time_slot)
+    // 打本报名才更新分组号
+    if (dto.registration_type === '打本报名') {
+      await this.updateGroupNumbers(dto.raid_date, dto.raid_time_slot)
+    }
 
     // 重新获取更新后的记录
     const { data: updatedData, error: fetchError } = await client
@@ -99,13 +105,14 @@ export class RaidRegistrationService {
   async findAll(): Promise<{ data: RaidRegistration[], warnings: GroupWarning[] }> {
     const client = this.getClient()
     
-    // 更新所有分组并获取警告
+    // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
 
     // 重新获取
     const { data: updatedData, error: fetchError } = await client
       .from('raid_registrations')
       .select('*')
+      .order('registration_type', { ascending: true })
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
       .order('group_number', { ascending: true })
@@ -127,7 +134,7 @@ export class RaidRegistrationService {
     // 先获取要删除的记录信息
     const { data: record, error: fetchError } = await client
       .from('raid_registrations')
-      .select('raid_date, raid_time_slot')
+      .select('raid_date, raid_time_slot, registration_type')
       .eq('id', id)
       .single()
 
@@ -145,24 +152,25 @@ export class RaidRegistrationService {
       throw new Error(`删除报名失败: ${error.message}`)
     }
 
-    // 更新分组
-    if (record) {
+    // 打本报名才更新分组
+    if (record && record.registration_type === '打本报名') {
       await this.updateGroupNumbers(record.raid_date, record.raid_time_slot)
     }
   }
 
   /**
-   * 更新指定日期时段的分组号（考虑霖霖分配规则）
+   * 更新指定日期时段的分组号（考虑霖霖分配规则）- 仅用于打本报名
    */
   private async updateGroupNumbers(raidDate: string, timeSlot: string): Promise<GroupWarning[]> {
     const client = this.getClient()
     
-    // 获取该时段的所有记录
+    // 获取该时段的打本报名记录
     const { data: records, error } = await client
       .from('raid_registrations')
       .select('id, school')
       .eq('raid_date', raidDate)
       .eq('raid_time_slot', timeSlot)
+      .eq('registration_type', '打本报名')
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -190,7 +198,6 @@ export class RaidRegistrationService {
       }
     }
 
-    const linlinCount = linlinRecords.length
     const warnings: GroupWarning[] = []
 
     // 为每个人分配组号
@@ -226,7 +233,7 @@ export class RaidRegistrationService {
       }
     }
 
-    // 3. 如果还有剩余的非霖霖成员（理论上不应该发生，因为组数是按总人数算的）
+    // 3. 如果还有剩余的非霖霖成员
     while (otherIndex < otherRecords.length) {
       const groupNum = (otherIndex % groupCount) + 1
       assignments.push({
@@ -245,7 +252,7 @@ export class RaidRegistrationService {
 
       if (groupLinlin < 2) {
         const groupTotal = assignments.filter(a => a.groupNumber === g).length
-        if (groupTotal > 0) { // 只有非空组才警告
+        if (groupTotal > 0) {
           warnings.push({
             raid_date: raidDate,
             raid_time_slot: timeSlot,
@@ -271,15 +278,16 @@ export class RaidRegistrationService {
   }
 
   /**
-   * 更新所有分组号
+   * 更新所有分组号 - 仅更新打本报名
    */
   private async updateAllGroupNumbers(): Promise<GroupWarning[]> {
     const client = this.getClient()
     
-    // 获取所有不同的日期+时段组合
+    // 获取所有打本报名的不同日期+时段组合
     const { data: records, error } = await client
       .from('raid_registrations')
       .select('raid_date, raid_time_slot')
+      .eq('registration_type', '打本报名')
 
     if (error || !records) {
       return []
@@ -308,13 +316,14 @@ export class RaidRegistrationService {
     const XLSX = await import('xlsx')
     const client = this.getClient()
     
-    // 更新所有分组并获取警告
+    // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
     
     // 获取所有记录
     const { data, error } = await client
       .from('raid_registrations')
       .select('*')
+      .order('registration_type', { ascending: true })
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
       .order('group_number', { ascending: true })
@@ -326,22 +335,25 @@ export class RaidRegistrationService {
 
     // 转换为Excel数据格式
     const excelData = data.map((record, index) => {
-      // 检查该记录所在组是否有警告
-      const groupWarning = warnings.find(w => 
-        w.raid_date === record.raid_date && 
-        w.raid_time_slot === record.raid_time_slot && 
-        w.group_number === record.group_number
-      )
+      // 打本报名才检查分组警告
+      const groupWarning = record.registration_type === '打本报名' 
+        ? warnings.find(w => 
+            w.raid_date === record.raid_date && 
+            w.raid_time_slot === record.raid_time_slot && 
+            w.group_number === record.group_number
+          )
+        : undefined
 
       return {
         '序号': index + 1,
+        '报名类型': record.registration_type,
         '玩家ID': record.player_id,
         '流派': record.school,
         '是否指挥': record.is_commander ? '是' : '否',
-        '打本日期': record.raid_date,
+        '活动日期': record.raid_date,
         '时间': record.raid_time_slot,
-        '组号': record.group_number,
-        '分组提醒': groupWarning ? groupWarning.warning : '',
+        '组号': record.registration_type === '打本报名' ? record.group_number : '-',
+        '分组提醒': groupWarning?.warning || '',
         '报名时间': new Date(record.created_at).toLocaleString('zh-CN')
       }
     })
@@ -354,10 +366,11 @@ export class RaidRegistrationService {
     // 设置列宽
     worksheet['!cols'] = [
       { wch: 6 },   // 序号
+      { wch: 12 },  // 报名类型
       { wch: 15 },  // 玩家ID
       { wch: 10 },  // 流派
       { wch: 10 },  // 是否指挥
-      { wch: 12 },  // 打本日期
+      { wch: 12 },  // 活动日期
       { wch: 12 },  // 时间
       { wch: 6 },   // 组号
       { wch: 25 },  // 分组提醒
