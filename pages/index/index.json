@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "打本报名",
+  "usingComponents": {
+    "comp": "../../comp"
+  }
+}
