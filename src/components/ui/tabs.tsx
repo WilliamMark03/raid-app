@@ -1,6 +1,6 @@
 import * as React from "react"
 import { View } from "@tarojs/components"
-import { type ITouchEvent } from "@tarojs/taro"
+import type { ITouchEvent } from "@tarojs/components/types/common"
 import { cn } from "@/lib/utils"
 
 const TabsContext = React.createContext<{

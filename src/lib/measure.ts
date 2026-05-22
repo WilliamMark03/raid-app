@@ -12,13 +12,13 @@ const toNumber = (v: unknown) => {
     return 0
 }
 
-const normalizeRect = (r: Record<string, unknown> | null | undefined): Rect | null => {
+const normalizeRect = (r: Record<string, unknown> | DOMRect | { left: number; top: number; width: number; height: number } | null | undefined): Rect | null => {
     if (!r) return null
     return {
-        left: toNumber(r.left),
-        top: toNumber(r.top),
-        width: toNumber(r.width),
-        height: toNumber(r.height),
+        left: toNumber('left' in r ? r.left : 0),
+        top: toNumber('top' in r ? r.top : 0),
+        width: toNumber('width' in r ? r.width : 0),
+        height: toNumber('height' in r ? r.height : 0),
     }
 }
 

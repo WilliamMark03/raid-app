@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
 import { Trash2, Users, Calendar, Clock, Download } from 'lucide-react-taro'
 
@@ -289,23 +288,20 @@ export default function IndexPage() {
         document.body.removeChild(link)
       } else {
         // 小程序端
-        Taro.downloadFile({
-          url: '/api/raid-registrations/export/excel',
-          success: (res) => {
-            if (res.statusCode === 200) {
-              Taro.openDocument({
-                filePath: res.tempFilePath,
-                fileType: 'xlsx',
-                success: () => {
-                  Taro.showToast({ title: '导出成功', icon: 'success' })
-                }
-              })
-            }
-          },
-          fail: () => {
-            Taro.showToast({ title: '导出失败', icon: 'none' })
-          }
+        const res = await Network.downloadFile({
+          url: '/api/raid-registrations/export/excel'
         })
+        if (res.statusCode === 200) {
+          Taro.openDocument({
+            filePath: res.tempFilePath,
+            fileType: 'xlsx',
+            success: () => {
+              Taro.showToast({ title: '导出成功', icon: 'success' })
+            }
+          })
+        } else {
+          Taro.showToast({ title: '导出失败', icon: 'none' })
+        }
       }
     } catch (error) {
       console.error('导出Excel失败:', error)
