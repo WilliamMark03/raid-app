@@ -9,6 +9,7 @@ export interface CreateRaidRegistrationDto {
   raid_date: string
   raid_time_slot: string
   team?: string // 小队：进攻组、防守组（百业战报名专用）
+  baiye_name?: string // 百业名称：铁匠铺、药铺、酒楼等
   remark?: string // 备注
 }
 
@@ -21,6 +22,7 @@ export interface RaidRegistration {
   raid_date: string
   raid_time_slot: string
   team: string | null
+  baiye_name: string | null
   remark: string | null
   group_number: number
   created_at: string
@@ -76,6 +78,7 @@ export class RaidRegistrationService {
         raid_date: dto.raid_date,
         raid_time_slot: dto.raid_time_slot,
         team: dto.team || null,
+        baiye_name: dto.baiye_name || null,
         remark: dto.remark || null,
         group_number: 0
       })
@@ -137,6 +140,56 @@ export class RaidRegistrationService {
     }
 
     return { data: updatedData as RaidRegistration[], warnings }
+  }
+
+  /**
+   * 根据百业名称获取报名记录（访问控制）
+   */
+  async findByBaiyeName(baiyeName: string): Promise<{ data: RaidRegistration[], warnings: GroupWarning[] }> {
+    const client = this.getClient()
+    
+    // 更新打本报名的分组并获取警告
+    const warnings = await this.updateAllGroupNumbers()
+    
+    // 更新百业战报名的分组
+    await this.updateAllBaiyeGroupNumbers()
+
+    // 按百业名称筛选
+    const { data: updatedData, error: fetchError } = await client
+      .from('raid_registrations')
+      .select('*')
+      .eq('baiye_name', baiyeName)
+      .order('registration_type', { ascending: true })
+      .order('raid_date', { ascending: true })
+      .order('raid_time_slot', { ascending: true })
+      .order('group_number', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (fetchError) {
+      throw new Error(`获取数据失败: ${fetchError.message}`)
+    }
+
+    return { data: updatedData as RaidRegistration[], warnings }
+  }
+
+  /**
+   * 获取所有百业名称列表（用于下拉选择）
+   */
+  async findAllBaiyeNames(): Promise<string[]> {
+    const client = this.getClient()
+    
+    const { data, error } = await client
+      .from('raid_registrations')
+      .select('baiye_name')
+      .not('baiye_name', 'is', null)
+
+    if (error || !data) {
+      return []
+    }
+
+    // 去重并返回
+    const uniqueNames = [...new Set(data.map(r => r.baiye_name).filter(Boolean))]
+    return uniqueNames as string[]
   }
 
   /**

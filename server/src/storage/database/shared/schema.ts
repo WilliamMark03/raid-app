@@ -19,6 +19,7 @@ export const raidRegistrations = pgTable(
 		raid_date: varchar("raid_date", { length: 20 }).notNull(), // 格式: YYYY-MM-DD 或 周六/周日/周六及周日
 		raid_time_slot: varchar("raid_time_slot", { length: 20 }).notNull(), // 时段
 		team: varchar("team", { length: 20 }), // 小队：进攻组、防守组（百业战报名专用）
+		baiye_name: varchar("baiye_name", { length: 50 }), // 百业名称：铁匠铺、药铺、酒楼等
 		remark: varchar("remark", { length: 200 }), // 备注
 		group_number: integer("group_number").default(0), // 0表示未分组
 		created_at: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
@@ -30,6 +31,7 @@ export const raidRegistrations = pgTable(
 		index("raid_registrations_raid_time_slot_idx").on(table.raid_time_slot),
 		index("raid_registrations_group_number_idx").on(table.group_number),
 		index("raid_registrations_team_idx").on(table.team),
+		index("raid_registrations_baiye_name_idx").on(table.baiye_name),
 	]
 );
 

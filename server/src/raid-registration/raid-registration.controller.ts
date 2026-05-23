@@ -5,6 +5,7 @@ import {
   Delete, 
   Body, 
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   Res
@@ -31,16 +32,36 @@ export class RaidRegistrationController {
   }
 
   /**
-   * 获取所有报名记录
+   * 获取所有报名记录（需要百业名称验证）
    */
   @Get()
   @HttpCode(HttpStatus.OK)
-  async findAll(): Promise<{ code: number; msg: string; data: RaidRegistration[]; warnings: GroupWarning[] }> {
+  async findAll(@Query('baiye_name') baiyeName?: string): Promise<{ code: number; msg: string; data: RaidRegistration[]; warnings: GroupWarning[] }> {
     try {
+      // 如果提供了百业名称，则按百业名称筛选
+      if (baiyeName) {
+        const { data, warnings } = await this.service.findByBaiyeName(baiyeName)
+        return { code: 200, msg: '获取成功', data, warnings }
+      }
+      // 否则返回所有记录（保留原有行为，用于管理）
       const { data, warnings } = await this.service.findAll()
       return { code: 200, msg: '获取成功', data, warnings }
     } catch (error) {
       return { code: 400, msg: error.message, data: [], warnings: [] }
+    }
+  }
+
+  /**
+   * 获取所有百业名称列表
+   */
+  @Get('baiye-names')
+  @HttpCode(HttpStatus.OK)
+  async findAllBaiyeNames(): Promise<{ code: number; msg: string; data: string[] }> {
+    try {
+      const data = await this.service.findAllBaiyeNames()
+      return { code: 200, msg: '获取成功', data }
+    } catch (error) {
+      return { code: 400, msg: error.message, data: [] }
     }
   }
 

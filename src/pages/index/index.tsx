@@ -50,6 +50,7 @@ interface RaidRegistration {
   registration_type: string
   player_id: string
   school: string
+  baiye_name: string | null
   is_commander: boolean
   raid_date: string
   raid_time_slot: string
@@ -83,6 +84,7 @@ export default function IndexPage() {
   const [selectedDate, setSelectedDate] = useState('')
   const [isCommander, setIsCommander] = useState(false)
   const [remark, setRemark] = useState('')
+  const [baiyeName, setBaiyeName] = useState('') // 报名时填写的百业名称
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
   const [baiyeData, setBaiyeData] = useState<GroupedRegistrations>({})
@@ -92,6 +94,11 @@ export default function IndexPage() {
   const [warnings, setWarnings] = useState<GroupWarning[]>([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  
+  // 访问控制相关状态
+  const [showAccessDialog, setShowAccessDialog] = useState(false)
+  const [accessBaiyeName, setAccessBaiyeName] = useState('')
+  const [currentAccessBaiye, setCurrentAccessBaiye] = useState('') // 当前验证通过的百业名称
   
   // 当前选择的报名类型
   const currentRegistrationType = REGISTRATION_TYPE_OPTIONS[registrationTypeIndex]?.value || '打本报名'
@@ -115,15 +122,31 @@ export default function IndexPage() {
   useEffect(() => {
     // 初始化日期为今天
     setSelectedDate(getTodayDate())
-    // 加载报名列表
-    fetchRegistrations()
+    // 显示访问对话框
+    setShowAccessDialog(true)
   }, [])
 
-  // 获取报名列表
-  const fetchRegistrations = async () => {
+  // 验证百业名称并加载数据
+  const handleAccessConfirm = async () => {
+    if (!accessBaiyeName.trim()) {
+      Taro.showToast({ title: '请输入百业名称', icon: 'none' })
+      return
+    }
+    
+    setCurrentAccessBaiye(accessBaiyeName.trim())
+    setShowAccessDialog(false)
+    await fetchRegistrations(accessBaiyeName.trim())
+  }
+
+  // 获取报名列表（按百业名称筛选）
+  const fetchRegistrations = async (baiyeNameFilter?: string) => {
     try {
+      const url = baiyeNameFilter 
+        ? `/api/raid-registrations?baiye_name=${encodeURIComponent(baiyeNameFilter)}`
+        : '/api/raid-registrations'
+      
       const res = await Network.request({
-        url: '/api/raid-registrations',
+        url,
         method: 'GET'
       })
       console.log('获取报名列表响应:', res.data)
@@ -202,6 +225,9 @@ export default function IndexPage() {
       Taro.showToast({ title: '请选择日期', icon: 'none' })
       return
     }
+    
+    // 百业名称可选，但如果填写了则保存
+    const finalBaiyeName = baiyeName.trim() || currentAccessBaiye || null
 
     setLoading(true)
     try {
@@ -210,6 +236,7 @@ export default function IndexPage() {
         registration_type: currentRegistrationType,
         player_id: playerId.trim(),
         school: SCHOOL_OPTIONS[schoolIndex],
+        baiye_name: finalBaiyeName,
         is_commander: showCommanderToggle ? isCommander : false,
         remark: remark.trim() || null
       }
@@ -238,7 +265,8 @@ export default function IndexPage() {
         setPlayerId('')
         setIsCommander(false)
         setRemark('')
-        fetchRegistrations()
+        setBaiyeName('')
+        fetchRegistrations(currentAccessBaiye)
       } else {
         Taro.showToast({ title: res.data?.msg || '报名失败', icon: 'none' })
       }
@@ -261,7 +289,7 @@ export default function IndexPage() {
 
       if (res.data?.code === 200) {
         Taro.showToast({ title: '删除成功', icon: 'success' })
-        fetchRegistrations()
+        fetchRegistrations(currentAccessBaiye)
       }
     } catch (error) {
       console.error('删除报名失败:', error)
@@ -341,9 +369,65 @@ export default function IndexPage() {
 
   return (
     <View className="min-h-full bg-gray-50 p-4 pb-20">
+      {/* 访问控制对话框 */}
+      {showAccessDialog && (
+        <View className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <View className="bg-white rounded-xl p-5 mx-4 w-full max-w-sm">
+            <Text className="block text-lg font-bold text-gray-900 mb-3">输入百业名称</Text>
+            <Text className="block text-sm text-gray-500 mb-3">请输入您所属的百业名称查看报名情况</Text>
+            <View className="bg-gray-50 rounded-lg px-3 py-2 mb-4">
+              <Input
+                className="w-full bg-transparent"
+                placeholder="如：铁匠铺"
+                value={accessBaiyeName}
+                onInput={(e) => setAccessBaiyeName(e.detail.value)}
+              />
+            </View>
+            <View className="flex flex-row gap-3">
+              <View className="flex-1">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    setShowAccessDialog(false)
+                    setAccessBaiyeName('')
+                  }}
+                >
+                  取消
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button 
+                  className="w-full bg-indigo-500"
+                  onClick={handleAccessConfirm}
+                >
+                  确认
+                </Button>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* 标题区 */}
       <View className="mb-4">
-        <Text className="block text-xl font-bold text-gray-900">活动报名</Text>
+        <View className="flex flex-row justify-between items-center">
+          <Text className="block text-xl font-bold text-gray-900">活动报名</Text>
+          <View className="flex flex-row gap-2 items-center">
+            {currentAccessBaiye && (
+              <Badge variant="secondary" className="bg-indigo-100 text-indigo-700">
+                {currentAccessBaiye}
+              </Badge>
+            )}
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => setShowAccessDialog(true)}
+            >
+              切换百业
+            </Button>
+          </View>
+        </View>
         <View className="flex flex-row gap-4 mt-1 flex-wrap">
           <Text className="block text-sm text-gray-500">
             打本 <Text className="text-indigo-500 font-semibold">{raidCount}</Text> 人
@@ -404,6 +488,20 @@ export default function IndexPage() {
                 <Text className="text-gray-400 text-sm">▼</Text>
               </View>
             </Picker>
+          </View>
+
+          {/* 百业名称（可选） */}
+          <View>
+            <Label className="text-sm text-gray-700 mb-1 block">百业名称（选填）</Label>
+            <View className="bg-gray-50 rounded-lg px-3 py-2">
+              <Input
+                className="w-full bg-transparent"
+                placeholder="如：铁匠铺、药铺等"
+                value={baiyeName}
+                onInput={(e) => setBaiyeName(e.detail.value)}
+              />
+            </View>
+            <Text className="block text-xs text-gray-400 mt-1">填写后仅同百业成员可见</Text>
           </View>
 
           {/* 活动日期/时间选择 */}
