@@ -52,6 +52,7 @@ interface RaidRegistration {
   school: string
   baiye_name: string | null
   is_commander: boolean
+  is_black_worker: boolean
   raid_date: string
   raid_time_slot: string
   team: string | null
@@ -83,8 +84,8 @@ export default function IndexPage() {
   const [teamIndex, setTeamIndex] = useState(0)
   const [selectedDate, setSelectedDate] = useState('')
   const [isCommander, setIsCommander] = useState(false)
+  const [isBlackWorker, setIsBlackWorker] = useState(false) // 是否为黑工（仅打本报名）
   const [remark, setRemark] = useState('')
-  const [baiyeName, setBaiyeName] = useState('') // 报名时填写的百业名称
   const [registrations, setRegistrations] = useState<RaidRegistration[]>([])
   const [groupedData, setGroupedData] = useState<GroupedRegistrations>({})
   const [baiyeData, setBaiyeData] = useState<GroupedRegistrations>({})
@@ -226,9 +227,6 @@ export default function IndexPage() {
       return
     }
     
-    // 百业名称可选，但如果填写了则保存
-    const finalBaiyeName = baiyeName.trim() || currentAccessBaiye || null
-
     setLoading(true)
     try {
       // 根据报名类型构建不同的请求数据
@@ -236,8 +234,9 @@ export default function IndexPage() {
         registration_type: currentRegistrationType,
         player_id: playerId.trim(),
         school: SCHOOL_OPTIONS[schoolIndex],
-        baiye_name: finalBaiyeName,
+        baiye_name: currentAccessBaiye || null,
         is_commander: showCommanderToggle ? isCommander : false,
+        is_black_worker: currentRegistrationType === '打本报名' ? isBlackWorker : false,
         remark: remark.trim() || null
       }
       
@@ -264,8 +263,8 @@ export default function IndexPage() {
         Taro.showToast({ title: '报名成功', icon: 'success' })
         setPlayerId('')
         setIsCommander(false)
+        setIsBlackWorker(false)
         setRemark('')
-        setBaiyeName('')
         fetchRegistrations(currentAccessBaiye)
       } else {
         Taro.showToast({ title: res.data?.msg || '报名失败', icon: 'none' })
@@ -490,20 +489,6 @@ export default function IndexPage() {
             </Picker>
           </View>
 
-          {/* 百业名称（可选） */}
-          <View>
-            <Label className="text-sm text-gray-700 mb-1 block">百业名称（选填）</Label>
-            <View className="bg-gray-50 rounded-lg px-3 py-2">
-              <Input
-                className="w-full bg-transparent"
-                placeholder="如：铁匠铺、药铺等"
-                value={baiyeName}
-                onInput={(e) => setBaiyeName(e.detail.value)}
-              />
-            </View>
-            <Text className="block text-xs text-gray-400 mt-1">填写后仅同百业成员可见</Text>
-          </View>
-
           {/* 活动日期/时间选择 */}
           {showDatePicker ? (
             <View>
@@ -574,6 +559,19 @@ export default function IndexPage() {
                 onClick={() => setIsCommander(!isCommander)}
               >
                 <View className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isCommander ? 'translate-x-5' : 'translate-x-0'}`} />
+              </View>
+            </View>
+          )}
+
+          {/* 是否为黑工 - 仅打本报名显示 */}
+          {currentRegistrationType === '打本报名' && (
+            <View className="flex flex-row items-center justify-between py-2">
+              <Label className="text-sm text-gray-700">是否为黑工</Label>
+              <View 
+                className={`w-12 h-7 rounded-full p-1 ${isBlackWorker ? 'bg-orange-500' : 'bg-gray-300'}`}
+                onClick={() => setIsBlackWorker(!isBlackWorker)}
+              >
+                <View className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${isBlackWorker ? 'translate-x-5' : 'translate-x-0'}`} />
               </View>
             </View>
           )}
@@ -687,6 +685,9 @@ export default function IndexPage() {
                                 <Text className="text-xs text-gray-400">({member.school})</Text>
                                 {member.is_commander && (
                                   <Badge className="bg-amber-100 text-amber-700 text-xs px-1">★指挥</Badge>
+                                )}
+                                {member.is_black_worker && (
+                                  <Badge className="bg-gray-800 text-white text-xs px-1">黑工</Badge>
                                 )}
                                 {member.remark && (
                                   <Text className="text-xs text-indigo-500">📝</Text>

@@ -16,6 +16,7 @@ export const raidRegistrations = pgTable(
 		player_id: varchar("player_id", { length: 50 }).notNull(),
 		school: varchar("school", { length: 20 }).notNull(),
 		is_commander: boolean("is_commander").default(false).notNull(), // 是否为指挥
+		is_black_worker: boolean("is_black_worker").default(false).notNull(), // 是否为黑工（仅打本报名）
 		raid_date: varchar("raid_date", { length: 20 }).notNull(), // 格式: YYYY-MM-DD 或 周六/周日/周六及周日
 		raid_time_slot: varchar("raid_time_slot", { length: 20 }).notNull(), // 时段
 		team: varchar("team", { length: 20 }), // 小队：进攻组、防守组（百业战报名专用）

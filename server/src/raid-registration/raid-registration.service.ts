@@ -6,6 +6,7 @@ export interface CreateRaidRegistrationDto {
   player_id: string
   school: string
   is_commander: boolean
+  is_black_worker: boolean
   raid_date: string
   raid_time_slot: string
   team?: string // 小队：进攻组、防守组（百业战报名专用）
@@ -19,6 +20,7 @@ export interface RaidRegistration {
   player_id: string
   school: string
   is_commander: boolean
+  is_black_worker: boolean
   raid_date: string
   raid_time_slot: string
   team: string | null
@@ -75,6 +77,7 @@ export class RaidRegistrationService {
         player_id: dto.player_id,
         school: dto.school,
         is_commander: dto.is_commander || false,
+        is_black_worker: dto.is_black_worker || false,
         raid_date: dto.raid_date,
         raid_time_slot: dto.raid_time_slot,
         team: dto.team || null,
