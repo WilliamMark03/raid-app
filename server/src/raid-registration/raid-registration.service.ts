@@ -117,10 +117,13 @@ export class RaidRegistrationService {
   }
 
   /**
-   * 获取所有报名记录
+   * 获取所有报名记录（自动过滤过期数据）
    */
   async findAll(): Promise<{ data: RaidRegistration[], warnings: GroupWarning[] }> {
     const client = this.getClient()
+    
+    // 先清理过期数据
+    await this.cleanExpiredData()
     
     // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
@@ -128,10 +131,12 @@ export class RaidRegistrationService {
     // 更新百业战报名的分组
     await this.updateAllBaiyeGroupNumbers()
 
-    // 重新获取
+    // 重新获取（只获取未来的数据）
+    const today = new Date().toISOString().split('T')[0]
     const { data: updatedData, error: fetchError } = await client
       .from('raid_registrations')
       .select('*')
+      .gte('raid_date', today)  // 只获取今天及以后的数据
       .order('registration_type', { ascending: true })
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
@@ -146,10 +151,13 @@ export class RaidRegistrationService {
   }
 
   /**
-   * 根据百业名称获取报名记录（访问控制）
+   * 根据百业名称获取报名记录（访问控制，自动过滤过期数据）
    */
   async findByBaiyeName(baiyeName: string): Promise<{ data: RaidRegistration[], warnings: GroupWarning[] }> {
     const client = this.getClient()
+    
+    // 先清理过期数据
+    await this.cleanExpiredData()
     
     // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
@@ -157,11 +165,13 @@ export class RaidRegistrationService {
     // 更新百业战报名的分组
     await this.updateAllBaiyeGroupNumbers()
 
-    // 按百业名称筛选
+    // 按百业名称筛选（只获取未来的数据）
+    const today = new Date().toISOString().split('T')[0]
     const { data: updatedData, error: fetchError } = await client
       .from('raid_registrations')
       .select('*')
       .eq('baiye_name', baiyeName)
+      .gte('raid_date', today)  // 只获取今天及以后的数据
       .order('registration_type', { ascending: true })
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
@@ -173,6 +183,24 @@ export class RaidRegistrationService {
     }
 
     return { data: updatedData as RaidRegistration[], warnings }
+  }
+
+  /**
+   * 清理过期数据（当日结束时清除当日及以前的报名内容）
+   */
+  async cleanExpiredData(): Promise<void> {
+    const client = this.getClient()
+    const today = new Date().toISOString().split('T')[0]
+    
+    // 删除今天之前的数据
+    const { error } = await client
+      .from('raid_registrations')
+      .delete()
+      .lt('raid_date', today)  // 删除 raid_date < 今天 的数据
+    
+    if (error) {
+      console.error('清理过期数据失败:', error.message)
+    }
   }
 
   /**
@@ -458,18 +486,26 @@ export class RaidRegistrationService {
 
   /**
    * 导出Excel统计数据
+   * @param baiyeName 百业名称，用于筛选
    */
-  async exportExcel(): Promise<Buffer> {
+  async exportExcel(baiyeName?: string): Promise<Buffer> {
     const XLSX = await import('xlsx-js-style')
     const client = this.getClient()
     
     // 更新打本报名的分组并获取警告
     const warnings = await this.updateAllGroupNumbers()
     
-    // 获取所有记录
-    const { data, error } = await client
+    // 构建查询 - 支持按百业筛选
+    let query = client
       .from('raid_registrations')
       .select('*')
+    
+    // 如果指定了百业名称，进行筛选
+    if (baiyeName) {
+      query = query.eq('baiye_name', baiyeName)
+    }
+    
+    const { data, error } = await query
       .order('registration_type', { ascending: true })
       .order('raid_date', { ascending: true })
       .order('raid_time_slot', { ascending: true })
@@ -478,6 +514,10 @@ export class RaidRegistrationService {
 
     if (error) {
       throw new Error(`获取数据失败: ${error.message}`)
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error('没有可导出的数据')
     }
 
     // 流派颜色映射
@@ -503,77 +543,96 @@ export class RaidRegistrationService {
     }
 
     // 定义列名
-    const headers = ['序号', '报名类型', '玩家ID', '流派', '是否指挥', '活动日期', '时间', '小队', '组号', '分组提醒', '备注', '报名时间']
+    const headers = ['序号', '玩家ID', '流派', '是否指挥', '是否黑工', '时间', '小队', '组号', '分组提醒', '备注', '报名时间']
     
-    // 创建工作表数据
-    const wsData = [headers]
-    
-    // 添加数据行
-    data.forEach((record, index) => {
-      const groupWarning = record.registration_type === '打本报名' 
-        ? warnings.find(w => 
-            w.raid_date === record.raid_date && 
-            w.raid_time_slot === record.raid_time_slot && 
-            w.group_number === record.group_number
-          )
-        : undefined
-
-      wsData.push([
-        index + 1,
-        record.registration_type,
-        record.player_id,
-        record.school,
-        record.is_commander ? '是' : '否',
-        record.raid_date,
-        record.raid_time_slot,
-        record.team || '-',
-        record.registration_type === '打本报名' ? record.group_number : '-',
-        groupWarning?.warning || '',
-        record.remark || '',
-        new Date(record.created_at).toLocaleString('zh-CN')
-      ])
-    })
-
-    // 创建工作簿和工作表
+    // 创建工作簿
     const workbook = XLSX.utils.book_new()
-    const worksheet = XLSX.utils.aoa_to_sheet(wsData)
-
-    // 设置列宽
-    worksheet['!cols'] = [
-      { wch: 6 },   // 序号
-      { wch: 12 },  // 报名类型
-      { wch: 15 },  // 玩家ID
-      { wch: 10 },  // 流派
-      { wch: 10 },  // 是否指挥
-      { wch: 14 },  // 活动日期
-      { wch: 12 },  // 时间
-      { wch: 10 },  // 小队
-      { wch: 6 },   // 组号
-      { wch: 25 },  // 分组提醒
-      { wch: 30 },  // 备注
-      { wch: 20 }   // 报名时间
-    ]
-
-    // 设置表头样式
-    headers.forEach((_, colIndex) => {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex })
-      if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
-      worksheet[cellAddress].s = {
-        fill: { fgColor: { rgb: 'FF4472C4' } },
-        font: { bold: true, color: { rgb: 'FFFFFFFF' } },
-        alignment: { horizontal: 'center', vertical: 'center' }
+    
+    // 按报名类型+日期分组
+    const groupedData = new Map<string, typeof data>()
+    data.forEach(record => {
+      const key = `${record.registration_type}_${record.raid_date}`
+      if (!groupedData.has(key)) {
+        groupedData.set(key, [])
       }
+      groupedData.get(key)!.push(record)
     })
+    
+    // 为每个分组创建工作表
+    let sheetIndex = 0
+    for (const [key, records] of groupedData) {
+      const [registrationType, raidDate] = key.split('_')
+      
+      // 工作表名称（截取前15个字符，避免超长）
+      const sheetName = `${registrationType.substring(0, 8)}_${raidDate}`.substring(0, 31)
+      
+      // 创建工作表数据
+      const wsData = [headers]
+      
+      // 添加数据行
+      records.forEach((record, index) => {
+        const groupWarning = record.registration_type === '打本报名' 
+          ? warnings.find(w => 
+              w.raid_date === record.raid_date && 
+              w.raid_time_slot === record.raid_time_slot && 
+              w.group_number === record.group_number
+            )
+          : undefined
 
-    // 为流派列（第4列，索引为3）设置颜色
-    for (let rowIndex = 1; rowIndex < wsData.length; rowIndex++) {
-      const school = wsData[rowIndex][3] as string
-      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: 3 })
-      if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
-      worksheet[cellAddress].s = getSchoolStyle(school)
+        wsData.push([
+          index + 1,
+          record.player_id,
+          record.school,
+          record.is_commander ? '是' : '否',
+          record.is_black_worker ? '是' : '否',
+          record.raid_time_slot,
+          record.team || '-',
+          record.registration_type === '打本报名' ? record.group_number : '-',
+          groupWarning?.warning || '',
+          record.remark || '',
+          new Date(record.created_at).toLocaleString('zh-CN')
+        ])
+      })
+      
+      const worksheet = XLSX.utils.aoa_to_sheet(wsData)
+
+      // 设置列宽
+      worksheet['!cols'] = [
+        { wch: 6 },   // 序号
+        { wch: 15 },  // 玩家ID
+        { wch: 10 },  // 流派
+        { wch: 10 },  // 是否指挥
+        { wch: 10 },  // 是否黑工
+        { wch: 12 },  // 时间
+        { wch: 10 },  // 小队
+        { wch: 6 },   // 组号
+        { wch: 25 },  // 分组提醒
+        { wch: 30 },  // 备注
+        { wch: 20 }   // 报名时间
+      ]
+
+      // 设置表头样式
+      headers.forEach((_, colIndex) => {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: colIndex })
+        if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
+        worksheet[cellAddress].s = {
+          fill: { fgColor: { rgb: 'FF4472C4' } },
+          font: { bold: true, color: { rgb: 'FFFFFFFF' } },
+          alignment: { horizontal: 'center', vertical: 'center' }
+        }
+      })
+
+      // 为流派列（第3列，索引为2）设置颜色
+      for (let rowIndex = 1; rowIndex < wsData.length; rowIndex++) {
+        const school = wsData[rowIndex][2] as string
+        const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: 2 })
+        if (!worksheet[cellAddress]) worksheet[cellAddress] = {}
+        worksheet[cellAddress].s = getSchoolStyle(school)
+      }
+      
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
+      sheetIndex++
     }
-
-    XLSX.utils.book_append_sheet(workbook, worksheet, '报名统计')
 
     // 生成Buffer
     return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })

@@ -34,8 +34,7 @@ const RAID_TIME_SLOT_OPTIONS = [
 // 百业战时间选项
 const BAIYE_TIME_OPTIONS = [
   { value: '周六', label: '周六' },
-  { value: '周日', label: '周日' },
-  { value: '周六及周日', label: '周六及周日' }
+  { value: '周日', label: '周日' }
 ]
 
 // 小队选项

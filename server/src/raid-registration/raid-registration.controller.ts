@@ -83,10 +83,14 @@ export class RaidRegistrationController {
    * 导出Excel统计
    */
   @Get('export/excel')
-  async exportExcel(@Res() res: Response): Promise<void> {
+  async exportExcel(
+    @Query('baiye_name') baiyeName: string,
+    @Res() res: Response
+  ): Promise<void> {
     try {
-      const buffer = await this.service.exportExcel()
-      const filename = `打本报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+      const buffer = await this.service.exportExcel(baiyeName)
+      const baiyeSuffix = baiyeName ? `_${baiyeName}` : ''
+      const filename = `活动报名统计${baiyeSuffix}_${new Date().toISOString().split('T')[0]}.xlsx`
       
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
