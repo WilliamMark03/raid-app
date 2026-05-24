@@ -302,20 +302,33 @@ export default function IndexPage() {
       return
     }
 
+    // 必须先验证百业才能导出
+    if (!currentAccessBaiye) {
+      Taro.showToast({ title: '请先输入百业名称验证', icon: 'none' })
+      return
+    }
+
     setExporting(true)
     try {
+      // 构建URL，传递百业名称参数
+      const baiyeParam = currentAccessBaiye ? `?baiye_name=${encodeURIComponent(currentAccessBaiye)}` : ''
+      const exportUrl = `/api/raid-registrations/export/excel${baiyeParam}`
+      const fileName = currentAccessBaiye 
+        ? `活动报名统计_${currentAccessBaiye}_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `活动报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+      
       // H5端直接下载
       if (Taro.getEnv() === 'WEB') {
         const link = document.createElement('a')
-        link.href = '/api/raid-registrations/export/excel'
-        link.download = `活动报名统计_${new Date().toISOString().split('T')[0]}.xlsx`
+        link.href = exportUrl
+        link.download = fileName
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
       } else {
         // 小程序端
         const res = await Network.downloadFile({
-          url: '/api/raid-registrations/export/excel'
+          url: exportUrl
         })
         if (res.statusCode === 200) {
           Taro.openDocument({
