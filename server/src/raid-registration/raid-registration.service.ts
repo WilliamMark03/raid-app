@@ -588,7 +588,7 @@ export class RaidRegistrationService {
     }
 
     // 定义列名
-    const headers = ['序号', '玩家ID', '流派', '是否指挥', '是否黑工', '时间', '小队', '组号', '分组提醒', '备注', '报名时间']
+    const headers = ['序号', '玩家ID', '流派', '活动日期', '是否指挥', '是否黑工', '时间', '小队', '组号', '分组提醒', '备注', '报名时间']
     
     // 创建工作簿
     const workbook = XLSX.utils.book_new()
@@ -628,6 +628,7 @@ export class RaidRegistrationService {
           index + 1,
           record.player_id,
           record.school,
+          record.raid_date,
           record.is_commander ? '是' : '否',
           record.is_black_worker ? '是' : '否',
           record.raid_time_slot,
@@ -646,6 +647,7 @@ export class RaidRegistrationService {
         { wch: 6 },   // 序号
         { wch: 15 },  // 玩家ID
         { wch: 10 },  // 流派
+        { wch: 12 },  // 活动日期
         { wch: 10 },  // 是否指挥
         { wch: 10 },  // 是否黑工
         { wch: 12 },  // 时间
